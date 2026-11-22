@@ -4,7 +4,7 @@ import { openDatabase, seed } from "../src/db.ts";
 import type { VaultResponse } from "../src/types.ts";
 import { Client, startServer } from "./helpers.ts";
 
-const db = openDatabase(":memory:");
+const db = await openDatabase(":memory:");
 let srv: Awaited<ReturnType<typeof startServer>>;
 let anon: Client;
 let alice: Client;
@@ -20,11 +20,14 @@ before(async () => {
 });
 after(async () => { await srv.close(); db.close(); });
 
-test("seeds both collections (524 prompts) and re-seeding is idempotent", () => {
-  assert.equal(seed(db), 0);
-  const n = (db.prepare("SELECT COUNT(*) AS n FROM prompts").get() as { n: number }).n;
+test("seeds both collections (524 prompts) and re-seeding is idempotent", async () => {
+  assert.equal(await seed(db), 0); // unchanged seed files: skipped without touching prompts
+  await db.run("DELETE FROM meta WHERE key = 'seed_hash'");
+  assert.equal(await seed(db), 0); // forced re-run: every row already present
+  assert.ok(await db.get("SELECT value FROM meta WHERE key = 'seed_hash'"));
+  const n = ((await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM prompts"))!).n;
   assert.equal(n, 524);
-  const pm = (db.prepare("SELECT COUNT(*) AS n FROM prompts WHERE collection = 'Product Management'").get() as { n: number }).n;
+  const pm = ((await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM prompts WHERE collection = 'Product Management'"))!).n;
   assert.equal(pm, 500);
 });
 
@@ -78,12 +81,12 @@ test("saves are per account and invisible to other accounts and anonymous users"
 });
 
 test("one vote per account; changing it moves the vote; anonymous can't vote", async () => {
-  const before = db.prepare("SELECT worked_votes w, total_votes t FROM prompts WHERE id = 2").get() as { w: number; t: number };
+  const before = (await db.get<{ w: number; t: number }>("SELECT worked_votes w, total_votes t FROM prompts WHERE id = 2"))!;
   assert.equal((await anon.call("/api/prompts/2/vote", { body: { worked: true } })).status, 401);
   await alice.call("/api/prompts/2/vote", { body: { worked: true } });
   await alice.call("/api/prompts/2/vote", { body: { worked: true } });
   await alice.call("/api/prompts/2/vote", { body: { worked: false } });
-  const after = db.prepare("SELECT worked_votes w, total_votes t FROM prompts WHERE id = 2").get() as { w: number; t: number };
+  const after = (await db.get<{ w: number; t: number }>("SELECT worked_votes w, total_votes t FROM prompts WHERE id = 2"))!;
   assert.deepEqual({ ...after }, { w: before.w, t: before.t + 1 });
   assert.equal((await alice.call("/api/prompts/2/vote", { body: { worked: "yes" } })).status, 400);
 });

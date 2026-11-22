@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { openDatabase } from "./db.ts";
+import { dbConfigFromEnv, openDatabase } from "./db.ts";
 import { createService } from "./api.ts";
 import { createApp } from "./app.ts";
 import { createAnalyzer } from "./analyze.ts";
@@ -12,11 +12,12 @@ import { randomBytes } from "node:crypto";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const PORT = Number(process.env.PORT ?? 3000);
 const HOST = process.env.HOST ?? "0.0.0.0";
-const DB_PATH = resolve(ROOT, process.env.DATABASE_PATH ?? "data/promptvault.db");
 const STATIC_DIR = resolve(ROOT, process.env.STATIC_DIR ?? "dist");
 
-const db = openDatabase(DB_PATH);
-const count = (db.prepare("SELECT COUNT(*) AS n FROM prompts").get() as { n: number }).n;
+const dbConfig = dbConfigFromEnv(process.env, ROOT);
+const db = await openDatabase(dbConfig);
+const count = (await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM prompts"))!.n;
+const dbLabel = dbConfig.url.startsWith("file:") ? dbConfig.url.slice(5) : new URL(dbConfig.url).host;
 
 const transcriber = transcriberFromEnv(process.env);
 
@@ -46,7 +47,7 @@ const server = createServer(
   }),
 );
 server.listen(PORT, HOST, () => {
-  console.log(`PromptVault API on http://localhost:${PORT}  (db: ${DB_PATH}, ${count} prompts)`);
+  console.log(`PromptVault API on http://localhost:${PORT}  (db: ${dbLabel}, ${count} prompts)`);
   console.log(`Post analyzer: STT ${transcriber ? "on (whisper.cpp)" : "off — set WHISPER_BIN + WHISPER_MODEL"}, admins: ${process.env.ADMIN_EMAILS ? process.env.ADMIN_EMAILS : "none — set ADMIN_EMAILS"}`);
 });
 

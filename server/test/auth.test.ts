@@ -6,7 +6,7 @@ import { hashPassword, signJwt, verifyJwt, verifyPassword, AuthError } from "../
 import type { AdminSubmissionsResponse, UserDTO } from "../src/types.ts";
 import { Client, TEST_SECRET, startServer } from "./helpers.ts";
 
-const db = openDatabase(":memory:");
+const db = await openDatabase(":memory:");
 const ADMIN_TOKEN = "script-admin-token";
 let srv: Awaited<ReturnType<typeof startServer>>;
 
@@ -91,7 +91,7 @@ test("register/login validation and uniform login errors", async () => {
 test("expired access token → 401 token_expired; refresh rotates; /me refreshes on its own", async () => {
   const c = new Client(srv.base);
   const { body } = await c.register("erin@example.com");
-  const sid = (db.prepare("SELECT id FROM sessions WHERE user_id = ? ORDER BY id DESC").get(body.user.id) as { id: number }).id;
+  const sid = ((await db.get<{ id: number }>("SELECT id FROM sessions WHERE user_id = ? ORDER BY id DESC", body.user.id))!).id;
   const past = Math.floor(Date.now() / 1000) - 3600;
   c.jar.set("pv_at", { value: signJwt({ sub: String(body.user.id), role: "user", sid, iat: past, exp: past + 900 }, TEST_SECRET), path: "/api" });
 
@@ -149,12 +149,12 @@ test("sign out everywhere ends other devices' sessions", async () => {
 
 test("signing in claims this browser's anonymous saves", async () => {
   const visitor = "cccccccc-3333-3333-3333-333333333333";
-  db.prepare("INSERT INTO saves (visitor_id, prompt_id, created_at) VALUES (?, 3, 0)").run(visitor);
+  await db.run("INSERT INTO saves (visitor_id, prompt_id, created_at) VALUES (?, 3, 0)", visitor);
   const c = new Client(srv.base, visitor);
   await c.register("ivy@example.com");
   const saved = await c.call<{ prompts: { id: number }[] }>("/api/vault?saved=1");
   assert.deepEqual(saved.body.prompts.map((p) => p.id), [3]);
-  assert.equal((db.prepare("SELECT COUNT(*) n FROM saves WHERE visitor_id = ?").get(visitor) as { n: number }).n, 0);
+  assert.equal(((await db.get<{ n: number }>("SELECT COUNT(*) n FROM saves WHERE visitor_id = ?", visitor))!).n, 0);
 });
 
 test("cross-site requests are blocked; the extension origin only reaches /api/analyze", async () => {
@@ -204,8 +204,8 @@ test("admin: role from ADMIN_EMAILS; users get 403, anonymous 401; admins see ev
 test("role changes apply immediately, without waiting for the token to expire", async () => {
   const c = new Client(srv.base);
   const { body } = await c.register("lee@example.com");
-  db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(body.user.id);
+  await db.run("UPDATE users SET role = 'admin' WHERE id = ?", body.user.id);
   assert.equal((await c.call("/api/admin/submissions")).status, 200);
-  db.prepare("UPDATE users SET role = 'user' WHERE id = ?").run(body.user.id);
+  await db.run("UPDATE users SET role = 'user' WHERE id = ?", body.user.id);
   assert.equal((await c.call("/api/admin/submissions")).status, 403);
 });

@@ -110,7 +110,7 @@ const V2 = "bbbbbbbb-2222-2222-2222-222222222222";
 const TOKEN = "test-admin-token";
 let server: Server;
 let base = "";
-const db = openDatabase(":memory:");
+const db = await openDatabase(":memory:");
 const heard: number[] = [];
 
 async function call<T>(path: string, opts: { method?: string; body?: unknown; visitor?: string; token?: string } = {}) {
@@ -168,16 +168,16 @@ test("moderation: approve publishes prompts; cache then serves them to everyone"
   assert.equal(later.body.status, "approved");
   assert.equal(later.body.prompts[0]!.title, approved.body.prompts[0]!.title);
 
-  const vault = db.prepare("SELECT COUNT(*) AS n FROM prompts WHERE collection = ?").get(ANALYZED_COLLECTION) as { n: number };
+  const vault = (await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM prompts WHERE collection = ?", ANALYZED_COLLECTION))!;
   assert.equal(vault.n, 1);
 });
 
 test("a post repeating a vault prompt is auto-approved and bumps its viral score", async () => {
-  const seedPrompt = db.prepare("SELECT id, master_prompt, viral_score FROM prompts WHERE seed_key IS NOT NULL AND collection = 'Viral Creator Prompts' LIMIT 1").get() as { id: number; master_prompt: string; viral_score: number };
+  const seedPrompt = (await db.get<{ id: number; master_prompt: string; viral_score: number }>("SELECT id, master_prompt, viral_score FROM prompts WHERE seed_key IS NOT NULL AND collection = 'Viral Creator Prompts' LIMIT 1"))!;
   const r = await call<AnalysisDTO>("/api/analyze", { method: "POST", body: { url: "https://www.instagram.com/p/RepostAbc1/", text: `Prompt: ${seedPrompt.master_prompt}` } });
   assert.equal(r.body.status, "approved");
   assert.deepEqual(r.body.prompts.map((p) => p.id), [seedPrompt.id]);
-  const after = db.prepare("SELECT viral_score FROM prompts WHERE id = ?").get(seedPrompt.id) as { viral_score: number };
+  const after = (await db.get<{ viral_score: number }>("SELECT viral_score FROM prompts WHERE id = ?", seedPrompt.id))!;
   assert.equal(after.viral_score, Math.min(100, seedPrompt.viral_score + 1));
 });
 
@@ -186,7 +186,7 @@ test("reel audio is transcribed and mined; LinkedIn text posts need no media", a
   const reel = await call<AnalysisDTO>("/api/analyze", { method: "POST", body: { url: "https://www.instagram.com/reel/AudioOnly01/", text: "Easy script hack 🎬", audio: { mime: "audio/webm;codecs=opus", data: audio } } });
   assert.equal(reel.body.status, "pending");
   assert.equal(heard.length, 1);
-  const row = db.prepare("SELECT transcript, candidates FROM analyses WHERE id = ?").get(reel.body.id) as { transcript: string; candidates: string };
+  const row = (await db.get<{ transcript: string; candidates: string }>("SELECT transcript, candidates FROM analyses WHERE id = ?", reel.body.id))!;
   assert.match(row.transcript, /youtube script writer/);
   assert.equal((JSON.parse(row.candidates) as { category: string }[])[0]!.category, "Reels Script");
 

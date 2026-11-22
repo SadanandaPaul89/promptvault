@@ -3,9 +3,8 @@
 // detection). Both tokens travel only in HttpOnly SameSite=Strict cookies, so
 // page JavaScript can't read them. node:crypto only, no dependencies.
 
-import type { DatabaseSync } from "node:sqlite";
 import { createHash, createHmac, randomBytes, randomUUID, scrypt, timingSafeEqual } from "node:crypto";
-import { transaction } from "./db.ts";
+import type { Db, Stmt } from "./db.ts";
 import type { UserDTO } from "./types.ts";
 
 export class AuthError extends Error {
@@ -124,13 +123,14 @@ export type AuthOptions = {
 export type Tokens = { access: string; refresh: string; accessTtlSec: number; refreshTtlSec: number };
 
 type UserRow = { id: number; email: string; name: string; password_hash: string; role: string; created_at: number };
-type SessionRow = { id: number; user_id: number; family: string; expires_at: number; revoked_at: number | null };
+type SessionWithUser = UserRow & { sid: number; user_id: number; family: string; expires_at: number; revoked_at: number | null };
 
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
+const VISITOR_RE = /^[A-Za-z0-9-]{16,64}$/;
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 
-export function createAuth(db: DatabaseSync, opts: AuthOptions) {
+export function createAuth(db: Db, opts: AuthOptions) {
   if (opts.jwtSecret.length < 32) throw new Error("JWT secret must be at least 32 characters");
   const accessTtlSec = opts.accessTtlSec ?? 15 * 60;
   const refreshTtlSec = opts.refreshTtlSec ?? 30 * 24 * 3600;
@@ -140,55 +140,49 @@ export function createAuth(db: DatabaseSync, opts: AuthOptions) {
   // Used to burn the same time on unknown emails as on wrong passwords.
   const dummyHash = hashPassword(randomBytes(16).toString("hex"));
 
-  const stmts = {
-    userByEmail: db.prepare("SELECT * FROM users WHERE email = ?"),
-    userById: db.prepare("SELECT * FROM users WHERE id = ?"),
-    insertUser: db.prepare("INSERT INTO users (email, name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?) RETURNING id"),
-    setRole: db.prepare("UPDATE users SET role = ?, last_login_at = ? WHERE id = ?"),
-    insertSession: db.prepare("INSERT INTO sessions (user_id, token_hash, family, expires_at, created_at, user_agent) VALUES (?, ?, ?, ?, ?, ?) RETURNING id"),
-    sessionByHash: db.prepare("SELECT * FROM sessions WHERE token_hash = ?"),
-    sessionById: db.prepare("SELECT * FROM sessions WHERE id = ?"),
-    revokeSession: db.prepare("UPDATE sessions SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL"),
-    revokeFamily: db.prepare("UPDATE sessions SET revoked_at = ? WHERE family = ? AND revoked_at IS NULL"),
-    revokeUser: db.prepare("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL"),
-    pruneSessions: db.prepare("DELETE FROM sessions WHERE expires_at < ?"),
-    familyLive: db.prepare("SELECT 1 FROM sessions WHERE family = ? AND revoked_at IS NULL AND expires_at > ? LIMIT 1"),
-    // Claim this browser's anonymous data on first sign-in.
-    claimSaves: db.prepare("UPDATE OR IGNORE saves SET visitor_id = ? WHERE visitor_id = ?"),
-    dropSaves: db.prepare("DELETE FROM saves WHERE visitor_id = ?"),
-    claimVotes: db.prepare("UPDATE OR IGNORE votes SET visitor_id = ? WHERE visitor_id = ?"),
-    dropVotes: db.prepare("DELETE FROM votes WHERE visitor_id = ?"),
-    claimSubs: db.prepare("UPDATE submissions SET visitor_id = ? WHERE visitor_id = ?"),
-  };
-
   const toDTO = (u: UserRow): UserDTO => ({ id: u.id, email: u.email, name: u.name, role: u.role === "admin" ? "admin" : "user" });
 
-  function issue(user: UserRow, family: string, userAgent: string): Tokens {
+  /** A new refresh session. Run it (as the last statement of a batch), then finish with the session id it returns. */
+  function newSession(user: UserRow, family: string, userAgent: string) {
     const now = Date.now();
     const refresh = randomBytes(32).toString("base64url");
-    const { id: sid } = stmts.insertSession.get(user.id, sha256(refresh), family, now + refreshTtlSec * 1000, now, userAgent.slice(0, 200)) as { id: number };
-    const iat = Math.floor(now / 1000);
-    const access = signJwt({ sub: String(user.id), role: user.role, sid, iat, exp: iat + accessTtlSec }, opts.jwtSecret);
-    return { access, refresh, accessTtlSec, refreshTtlSec };
+    const stmt: Stmt = {
+      sql: "INSERT INTO sessions (user_id, token_hash, family, expires_at, created_at, user_agent) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+      args: [user.id, sha256(refresh), family, now + refreshTtlSec * 1000, now, userAgent.slice(0, 200)],
+    };
+    const finish = (sid: number): Tokens => {
+      const iat = Math.floor(now / 1000);
+      const access = signJwt({ sub: String(user.id), role: user.role, sid, iat, exp: iat + accessTtlSec }, opts.jwtSecret);
+      return { access, refresh, accessTtlSec, refreshTtlSec };
+    };
+    return { stmt, finish };
   }
 
-  function syncRole(u: UserRow): UserRow {
+  /** Runs `before` and the session insert atomically, returning the new tokens. */
+  async function issue(user: UserRow, family: string, userAgent: string, before: Stmt[] = []): Promise<Tokens> {
+    const s = newSession(user, family, userAgent);
+    const results = await db.batch<{ id: number }>([...before, s.stmt]);
+    return s.finish(results[results.length - 1]![0]!.id);
+  }
+
+  /** Admin role from ADMIN_EMAILS is applied at every sign-in and refresh. */
+  function syncRole(u: UserRow): { user: UserRow; stmt: Stmt } {
     const role = admins.has(u.email) ? "admin" : u.role;
-    stmts.setRole.run(role, Date.now(), u.id);
-    return { ...u, role };
+    return { user: { ...u, role }, stmt: { sql: "UPDATE users SET role = ?, last_login_at = ? WHERE id = ?", args: [role, Date.now(), u.id] } };
   }
 
-  function claimVisitor(userId: number, visitorId: string | undefined) {
-    if (!visitorId || !/^[A-Za-z0-9-]{16,64}$/.test(visitorId)) return;
+  /** Moves this browser's anonymous saves/votes/submissions into the account. */
+  function claimVisitor(userId: number, visitorId: string | undefined): Stmt[] {
+    if (!visitorId || !VISITOR_RE.test(visitorId)) return [];
     const owner = `u:${userId}`;
-    transaction(db, () => {
-      // Rows that would collide with the account's own save/vote stay with the account.
-      stmts.claimSaves.run(owner, visitorId);
-      stmts.dropSaves.run(visitorId);
-      stmts.claimVotes.run(owner, visitorId);
-      stmts.dropVotes.run(visitorId);
-      stmts.claimSubs.run(owner, visitorId);
-    });
+    // Rows that would collide with the account's own save/vote stay with the account.
+    return [
+      { sql: "UPDATE OR IGNORE saves SET visitor_id = ? WHERE visitor_id = ?", args: [owner, visitorId] },
+      { sql: "DELETE FROM saves WHERE visitor_id = ?", args: [visitorId] },
+      { sql: "UPDATE OR IGNORE votes SET visitor_id = ? WHERE visitor_id = ?", args: [owner, visitorId] },
+      { sql: "DELETE FROM votes WHERE visitor_id = ?", args: [visitorId] },
+      { sql: "UPDATE submissions SET visitor_id = ? WHERE visitor_id = ?", args: [owner, visitorId] },
+    ];
   }
 
   function validate(email: string, password: string) {
@@ -197,80 +191,98 @@ export function createAuth(db: DatabaseSync, opts: AuthOptions) {
     if (password.length > 200) throw new AuthError(400, "weak_password", "That password is too long.");
   }
 
+  const emailTaken = () => new AuthError(409, "email_taken", "An account with this email already exists. Sign in instead.");
+
   return {
     async register(input: { email: string; password: string; name: string; visitorId?: string; userAgent: string }) {
       const email = input.email.trim().toLowerCase();
       validate(email, input.password);
-      if (stmts.userByEmail.get(email)) throw new AuthError(409, "email_taken", "An account with this email already exists. Sign in instead.");
+      if (await db.get("SELECT 1 AS ok FROM users WHERE email = ?", email)) throw emailTaken();
       const hash = await hashPassword(input.password);
-      let id: number;
+      let user: UserRow | undefined;
       try {
-        ({ id } = stmts.insertUser.get(email, input.name.trim().slice(0, 80), hash, admins.has(email) ? "admin" : "user", Date.now()) as { id: number });
+        user = await db.get<UserRow>(
+          "INSERT INTO users (email, name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?) RETURNING *",
+          email, input.name.trim().slice(0, 80), hash, admins.has(email) ? "admin" : "user", Date.now(),
+        );
       } catch {
-        throw new AuthError(409, "email_taken", "An account with this email already exists. Sign in instead.");
+        throw emailTaken(); // lost a race with a concurrent sign-up
       }
-      const user = stmts.userById.get(id) as UserRow;
-      claimVisitor(user.id, input.visitorId);
-      return { user: toDTO(user), tokens: issue(user, randomUUID(), input.userAgent) };
+      const tokens = await issue(user!, randomUUID(), input.userAgent, claimVisitor(user!.id, input.visitorId));
+      return { user: toDTO(user!), tokens };
     },
 
     async login(input: { email: string; password: string; visitorId?: string; userAgent: string }) {
       const email = input.email.trim().toLowerCase();
-      const row = stmts.userByEmail.get(email) as UserRow | undefined;
+      const row = await db.get<UserRow>("SELECT * FROM users WHERE email = ?", email);
       const ok = row ? await verifyPassword(input.password, row.password_hash) : (await verifyPassword(input.password, await dummyHash), false);
       if (!row || !ok) throw new AuthError(401, "bad_credentials", "Wrong email or password.");
-      const user = syncRole(row);
-      claimVisitor(user.id, input.visitorId);
-      stmts.pruneSessions.run(Date.now());
-      return { user: toDTO(user), tokens: issue(user, randomUUID(), input.userAgent) };
+      const { user, stmt } = syncRole(row);
+      const tokens = await issue(user, randomUUID(), input.userAgent, [
+        stmt,
+        ...claimVisitor(user.id, input.visitorId),
+        { sql: "DELETE FROM sessions WHERE expires_at < ?", args: [Date.now()] },
+      ]);
+      return { user: toDTO(user), tokens };
     },
 
     /** Rotates the refresh token. Reusing an already-rotated token revokes the whole family. */
-    refresh(refreshToken: string | undefined, userAgent: string) {
+    async refresh(refreshToken: string | undefined, userAgent: string) {
       if (!refreshToken) throw new AuthError(401, "no_session", "Not signed in");
-      const s = stmts.sessionByHash.get(sha256(refreshToken)) as SessionRow | undefined;
+      const s = await db.get<SessionWithUser>(
+        `SELECT u.*, s.id AS sid, s.user_id, s.family, s.expires_at, s.revoked_at
+         FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?`,
+        sha256(refreshToken),
+      );
       if (!s) throw new AuthError(401, "no_session", "Not signed in");
       const now = Date.now();
       if (s.revoked_at !== null) {
-        if (now - s.revoked_at > rotationGraceMs) stmts.revokeFamily.run(now, s.family); // likely stolen
+        if (now - s.revoked_at > rotationGraceMs) {
+          // Likely stolen: end every session descended from this sign-in.
+          await db.run("UPDATE sessions SET revoked_at = ? WHERE family = ? AND revoked_at IS NULL", now, s.family);
+        }
         throw new AuthError(401, "session_revoked", "Session ended. Sign in again.");
       }
       if (s.expires_at <= now) throw new AuthError(401, "session_expired", "Session expired. Sign in again.");
-      const row = stmts.userById.get(s.user_id) as UserRow | undefined;
-      if (!row) throw new AuthError(401, "no_session", "Not signed in");
-      return transaction(db, () => {
-        stmts.revokeSession.run(now, s.id);
-        const user = syncRole(row);
-        return { user: toDTO(user), tokens: issue(user, s.family, userAgent) };
-      });
+      const { user, stmt } = syncRole(s);
+      const tokens = await issue(user, s.family, userAgent, [
+        { sql: "UPDATE sessions SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL", args: [now, s.sid] },
+        stmt,
+      ]);
+      return { user: toDTO(user), tokens };
     },
 
-    logout(refreshToken: string | undefined, everywhere: boolean, userId?: number) {
+    async logout(refreshToken: string | undefined, everywhere: boolean, userId?: number) {
       const now = Date.now();
-      if (everywhere && userId !== undefined) { stmts.revokeUser.run(now, userId); return; }
+      if (everywhere && userId !== undefined) {
+        await db.run("UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL", now, userId);
+        return;
+      }
       if (!refreshToken) return;
-      const s = stmts.sessionByHash.get(sha256(refreshToken)) as SessionRow | undefined;
-      if (s) stmts.revokeFamily.run(now, s.family);
+      await db.run(
+        "UPDATE sessions SET revoked_at = ? WHERE family = (SELECT family FROM sessions WHERE token_hash = ?) AND revoked_at IS NULL",
+        now, sha256(refreshToken),
+      );
     },
 
-    /** The signed-in user for an access token, or null. Checks the session is still live. */
-    userFromAccess(token: string | undefined): UserDTO | null {
+    /** The signed-in user for an access token, or null. Checks the session is still live (one query). */
+    async userFromAccess(token: string | undefined): Promise<UserDTO | null> {
       if (!token) return null;
       const c = verifyJwt(token, opts.jwtSecret); // throws token_expired / invalid_token
-      const s = stmts.sessionById.get(c.sid) as SessionRow | undefined;
-      // A revoked session's *successor* stays valid, so check the family isn't wholly revoked:
-      // the access token's own session is revoked by normal rotation, which is fine for its 15 min.
-      if (!s || s.user_id !== Number(c.sub)) throw new AuthError(401, "invalid_token", "Invalid token");
-      const row = stmts.userById.get(Number(c.sub)) as UserRow | undefined;
-      if (!row) throw new AuthError(401, "invalid_token", "Invalid token");
-      if (s.revoked_at !== null && !isFamilyLive(s.family)) throw new AuthError(401, "session_revoked", "Session ended. Sign in again.");
+      // The access token's own session is revoked by normal rotation, which is fine for its 15 minutes,
+      // so what matters is that the family (this sign-in) still has a live session.
+      const row = await db.get<UserRow & { user_id: number; live: number }>(
+        `SELECT u.*, s.user_id,
+                (s.revoked_at IS NULL OR EXISTS (
+                   SELECT 1 FROM sessions f WHERE f.family = s.family AND f.revoked_at IS NULL AND f.expires_at > ?)) AS live
+         FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?`,
+        Date.now(), c.sid,
+      );
+      if (!row || row.user_id !== Number(c.sub)) throw new AuthError(401, "invalid_token", "Invalid token");
+      if (!row.live) throw new AuthError(401, "session_revoked", "Session ended. Sign in again.");
       return toDTO(row);
     },
   };
-
-  function isFamilyLive(family: string): boolean {
-    return !!stmts.familyLive.get(family, Date.now());
-  }
 }
 
 export type Auth = ReturnType<typeof createAuth>;

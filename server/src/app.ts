@@ -129,14 +129,14 @@ export function createApp({ service, auth, analyzer, adminToken, staticDir, trus
   }
 
   /** Signed-in user, or null when anonymous. An expired token is a 401 so the client refreshes. */
-  function currentUser(req: IncomingMessage): UserDTO | null {
+  async function currentUser(req: IncomingMessage): Promise<UserDTO | null> {
     const token = parseCookies(req.headers.cookie)[ACCESS_COOKIE];
     if (!token) return null;
     return auth.userFromAccess(token);
   }
 
-  function requireUser(req: IncomingMessage): UserDTO {
-    const u = currentUser(req);
+  async function requireUser(req: IncomingMessage): Promise<UserDTO> {
+    const u = await currentUser(req);
     if (!u) throw new AuthError(401, "auth_required", "Sign in to do that.");
     return u;
   }
@@ -144,7 +144,7 @@ export function createApp({ service, auth, analyzer, adminToken, staticDir, trus
   const owner = (u: UserDTO) => `u:${u.id}`;
 
   /** Admins (by role), or the ADMIN_TOKEN bearer token for scripts. */
-  function requireAdmin(req: IncomingMessage) {
+  async function requireAdmin(req: IncomingMessage) {
     const header = String(req.headers.authorization ?? "");
     if (adminToken && header) {
       const got = Buffer.from(header);
@@ -152,7 +152,7 @@ export function createApp({ service, auth, analyzer, adminToken, staticDir, trus
       if (got.length === want.length && timingSafeEqual(got, want)) return;
       throw new HttpError(401, "Unauthorized");
     }
-    const u = requireUser(req);
+    const u = await requireUser(req);
     if (u.role !== "admin") throw new AuthError(403, "forbidden", "Admins only.");
   }
 
@@ -251,7 +251,7 @@ export function createApp({ service, auth, analyzer, adminToken, staticDir, trus
       }
       if (method === "POST" && path === "/api/auth/refresh") {
         try {
-          const r = auth.refresh(parseCookies(req.headers.cookie)[REFRESH_COOKIE], ua);
+          const r = await auth.refresh(parseCookies(req.headers.cookie)[REFRESH_COOKIE], ua);
           setSession(req, res, r.tokens);
           return send(res, 200, { user: r.user });
         } catch (e) {
@@ -262,15 +262,15 @@ export function createApp({ service, auth, analyzer, adminToken, staticDir, trus
       if (method === "POST" && path === "/api/auth/logout") {
         const body = await readJson(req);
         let user: UserDTO | null = null;
-        try { user = currentUser(req); } catch { /* expired is fine for logout */ }
-        auth.logout(parseCookies(req.headers.cookie)[REFRESH_COOKIE], body.everywhere === true, user?.id);
+        try { user = await currentUser(req); } catch { /* expired is fine for logout */ }
+        await auth.logout(parseCookies(req.headers.cookie)[REFRESH_COOKIE], body.everywhere === true, user?.id);
         clearSession(req, res);
         return send(res, 200, { ok: true });
       }
       if (method === "GET" && path === "/api/auth/me") {
         // One call on page load: valid access token → user; otherwise try the refresh cookie.
         try {
-          const u = currentUser(req);
+          const u = await currentUser(req);
           if (u) return send(res, 200, { user: u });
         } catch (e) {
           if (!(e instanceof AuthError)) throw e;
@@ -278,7 +278,7 @@ export function createApp({ service, auth, analyzer, adminToken, staticDir, trus
         const rt = parseCookies(req.headers.cookie)[REFRESH_COOKIE];
         if (!rt) return send(res, 200, { user: null });
         try {
-          const r = auth.refresh(rt, ua);
+          const r = await auth.refresh(rt, ua);
           setSession(req, res, r.tokens);
           return send(res, 200, { user: r.user });
         } catch {
@@ -291,9 +291,9 @@ export function createApp({ service, auth, analyzer, adminToken, staticDir, trus
 
     if (path === "/api/vault" && method === "GET") {
       const p = url.searchParams;
-      const user = currentUser(req);
+      const user = await currentUser(req);
       if (p.get("saved") === "1" && !user) throw new AuthError(401, "auth_required", "Sign in to see your saved prompts.");
-      return send(res, 200, service.vault(user ? owner(user) : "", {
+      return send(res, 200, await service.vault(user ? owner(user) : "", {
         q: (p.get("q") ?? "").slice(0, 200),
         collection: (p.get("collection") ?? ALL).slice(0, 80),
         category: (p.get("category") ?? ALL).slice(0, 80),
@@ -307,19 +307,19 @@ export function createApp({ service, auth, analyzer, adminToken, staticDir, trus
     if (m && method === "POST") {
       const id = Number(m[1]);
       const action = m[2];
-      if (action === "copy") return send(res, 200, service.recordCopy(id));
-      if (action === "save") return send(res, 200, service.toggleSave(owner(requireUser(req)), id));
+      if (action === "copy") return send(res, 200, await service.recordCopy(id));
+      if (action === "save") return send(res, 200, await service.toggleSave(owner(await requireUser(req)), id));
       const body = await readJson(req);
       if (typeof body.worked !== "boolean") throw new HttpError(400, "`worked` must be true or false");
-      return send(res, 200, service.vote(owner(requireUser(req)), id, body.worked));
+      return send(res, 200, await service.vote(owner(await requireUser(req)), id, body.worked));
     }
 
     if (path === "/api/submissions" && method === "GET") {
-      return send(res, 200, service.mySubmissions(owner(requireUser(req)), int(url.searchParams.get("limit"), 10, 1, 50)));
+      return send(res, 200, await service.mySubmissions(owner(await requireUser(req)), int(url.searchParams.get("limit"), 10, 1, 50)));
     }
 
     if (path === "/api/submissions" && method === "POST") {
-      const visitor = owner(requireUser(req));
+      const visitor = owner(await requireUser(req));
       if (!limiter.check(`s:${ip}`, 20, 60 * 60_000)) throw new HttpError(429, "Submission limit reached — try again in an hour.");
       const body = await readJson(req);
       const rawUrl = str(body.url, 500);
@@ -327,13 +327,13 @@ export function createApp({ service, auth, analyzer, adminToken, staticDir, trus
       try { parsed = new URL(rawUrl); } catch { throw new HttpError(400, "Paste a full link starting with https://"); }
       if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new HttpError(400, "Only http(s) links are accepted");
       const category = str(body.category, 80, "Other");
-      if (category !== "Other" && !service.categories().has(category)) throw new HttpError(400, "Unknown category");
-      return send(res, 201, service.submit(visitor, parsed.toString(), str(body.note, 300), category));
+      if (category !== "Other" && !(await service.categories()).has(category)) throw new HttpError(400, "Unknown category");
+      return send(res, 201, await service.submit(visitor, parsed.toString(), str(body.note, 300), category));
     }
 
     // --- post analyzer (called by the browser extension) -------------------------
     if (analyzer && path === "/api/analyze" && method === "GET") {
-      return send(res, 200, analyzer.lookup(visitorId(req), str(url.searchParams.get("url"), 2000)));
+      return send(res, 200, await analyzer.lookup(visitorId(req), str(url.searchParams.get("url"), 2000)));
     }
 
     if (analyzer && path === "/api/analyze" && method === "POST") {
@@ -341,7 +341,7 @@ export function createApp({ service, auth, analyzer, adminToken, staticDir, trus
       const body = await readJson(req, MAX_ANALYZE_BODY);
       const postUrl = str(body.url, 2000);
       // Cache hits are cheap; only count requests that may run extraction/STT.
-      const cachedOnly = analyzer.lookup(visitor, postUrl);
+      const cachedOnly = await analyzer.lookup(visitor, postUrl);
       if (cachedOnly.found) return send(res, 200, cachedOnly);
       if (!limiter.check(`a:${ip}`, 30, 60 * 60_000)) throw new HttpError(429, "Analysis limit reached — try again in an hour.");
       let audio: Buffer | undefined;
@@ -365,32 +365,32 @@ export function createApp({ service, auth, analyzer, adminToken, staticDir, trus
 
     // --- admin: submitted links ------------------------------------------------------
     if (path === "/api/admin/submissions" && method === "GET") {
-      requireAdmin(req);
+      await requireAdmin(req);
       const status = (url.searchParams.get("status") ?? "pending") as SubmissionStatus | "all";
       if (status !== "all" && !SUBMISSION_STATUSES.has(status)) throw new HttpError(400, "Unknown status");
-      return send(res, 200, service.adminSubmissions(status, int(url.searchParams.get("limit"), 50, 1, 200), int(url.searchParams.get("offset"), 0, 0, 1_000_000)));
+      return send(res, 200, await service.adminSubmissions(status, int(url.searchParams.get("limit"), 50, 1, 200), int(url.searchParams.get("offset"), 0, 0, 1_000_000)));
     }
     const sm = path.match(/^\/api\/admin\/submissions\/(\d{1,9})$/);
     if (sm && method === "POST") {
-      requireAdmin(req);
+      await requireAdmin(req);
       const body = await readJson(req);
       if (typeof body.status !== "string" || !SUBMISSION_STATUSES.has(body.status as SubmissionStatus)) throw new HttpError(400, "status must be pending, added or rejected");
-      return send(res, 200, service.setSubmissionStatus(Number(sm[1]), body.status as SubmissionStatus));
+      return send(res, 200, await service.setSubmissionStatus(Number(sm[1]), body.status as SubmissionStatus));
     }
 
     // --- admin: post analyses (role admin or ADMIN_TOKEN) ------------------------
     if (analyzer && path === "/api/admin/analyses" && method === "GET") {
-      requireAdmin(req);
+      await requireAdmin(req);
       const status = (url.searchParams.get("status") ?? "pending") as AnalysisStatus;
       if (!STATUSES.has(status)) throw new HttpError(400, "Unknown status");
-      return send(res, 200, { analyses: analyzer.list(status, int(url.searchParams.get("limit"), 20, 1, 100)) });
+      return send(res, 200, { analyses: await analyzer.list(status, int(url.searchParams.get("limit"), 20, 1, 100)) });
     }
 
     const am = path.match(/^\/api\/admin\/analyses\/(\d{1,9})\/(approve|reject)$/);
     if (analyzer && am && method === "POST") {
-      requireAdmin(req);
+      await requireAdmin(req);
       const id = Number(am[1]);
-      if (am[2] === "reject") return send(res, 200, analyzer.reject(id));
+      if (am[2] === "reject") return send(res, 200, await analyzer.reject(id));
       const body = await readJson(req);
       let keep: number[] | undefined;
       if (body.keep !== undefined) {
@@ -399,7 +399,7 @@ export function createApp({ service, auth, analyzer, adminToken, staticDir, trus
         }
         keep = body.keep as number[];
       }
-      return send(res, 200, analyzer.approve(id, keep));
+      return send(res, 200, await analyzer.approve(id, keep));
     }
 
     throw new HttpError(404, "Not found");

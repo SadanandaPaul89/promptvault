@@ -1,6 +1,9 @@
-import type { DatabaseSync } from "node:sqlite";
-import { transaction, type PromptRow } from "./db.ts";
+import type { Db, PromptRow } from "./db.ts";
 import { buildIdf, isRelevant, scorePrompt, tokenize, type Idf, type RankablePrompt } from "./ranking.ts";
+import {
+  ALL, type AdminSubmissionDTO, type AdminSubmissionsResponse, type CollectionInfo, type PromptDTO, type SubmissionDTO,
+  type SubmissionStatus, type VaultResponse,
+} from "./types.ts";
 
 function toRankable(r: PromptRow): RankablePrompt {
   return {
@@ -9,10 +12,6 @@ function toRankable(r: PromptRow): RankablePrompt {
     totalVotes: r.total_votes, createdAt: r.created_at,
   };
 }
-import {
-  ALL, type AdminSubmissionDTO, type AdminSubmissionsResponse, type CollectionInfo, type PromptDTO, type SubmissionDTO,
-  type SubmissionStatus, type VaultResponse,
-} from "./types.ts";
 
 type SubmissionRow = { id: number; url: string; note: string; category: string; status: string; created_at: number; email?: string | null };
 const toSubmissionDTO = (r: SubmissionRow): SubmissionDTO => ({
@@ -36,42 +35,21 @@ export type VaultQuery = {
   limit: number;
 };
 
-export function createService(db: DatabaseSync) {
-  const stmts = {
-    allPrompts: db.prepare("SELECT * FROM prompts"),
-    promptById: db.prepare("SELECT * FROM prompts WHERE id = ?"),
-    savesFor: db.prepare("SELECT prompt_id FROM saves WHERE visitor_id = ?"),
-    votesFor: db.prepare("SELECT prompt_id, worked FROM votes WHERE visitor_id = ?"),
-    submissionCount: db.prepare("SELECT COUNT(*) AS n FROM submissions"),
-    incCopy: db.prepare("UPDATE prompts SET copy_count = copy_count + 1 WHERE id = ? RETURNING copy_count"),
-    getSave: db.prepare("SELECT 1 FROM saves WHERE visitor_id = ? AND prompt_id = ?"),
-    addSave: db.prepare("INSERT INTO saves (visitor_id, prompt_id, created_at) VALUES (?, ?, ?)"),
-    delSave: db.prepare("DELETE FROM saves WHERE visitor_id = ? AND prompt_id = ?"),
-    getVote: db.prepare("SELECT worked FROM votes WHERE visitor_id = ? AND prompt_id = ?"),
-    upsertVote: db.prepare(
-      `INSERT INTO votes (visitor_id, prompt_id, worked, created_at) VALUES (?, ?, ?, ?)
-       ON CONFLICT(visitor_id, prompt_id) DO UPDATE SET worked = excluded.worked`,
-    ),
-    bumpVotes: db.prepare("UPDATE prompts SET total_votes = total_votes + ?, worked_votes = worked_votes + ? WHERE id = ?"),
-    addSubmission: db.prepare(
-      "INSERT INTO submissions (visitor_id, url, note, category, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?) RETURNING id",
-    ),
-    mySubmissions: db.prepare("SELECT * FROM submissions WHERE visitor_id = ? ORDER BY id DESC LIMIT ?"),
-    adminSubmissions: db.prepare(
-      `SELECT s.*, u.email FROM submissions s LEFT JOIN users u ON s.visitor_id = 'u:' || u.id
-       WHERE (? = 'all' OR s.status = ?) ORDER BY s.id DESC LIMIT ? OFFSET ?`,
-    ),
-    submissionCounts: db.prepare("SELECT status, COUNT(*) AS n FROM submissions GROUP BY status"),
-    setSubmissionStatus: db.prepare("UPDATE submissions SET status = ? WHERE id = ?"),
-    submissionById: db.prepare("SELECT s.*, u.email FROM submissions s LEFT JOIN users u ON s.visitor_id = 'u:' || u.id WHERE s.id = ?"),
-  };
+/** Cache key for the prompt catalog. Anything that changes a prompt row invalidates it. */
+export const PROMPTS_CACHE = "prompts";
+const PROMPTS_TTL_MS = 60_000;
 
-  let idfCache: { size: number; idf: Idf } | undefined;
+const successRate = (worked: number, total: number) => (total > 0 ? Math.round((worked / total) * 100) : 75);
 
-  function requirePrompt(id: number): PromptRow {
-    const row = stmts.promptById.get(id) as PromptRow | undefined;
-    if (!row) throw new HttpError(404, "Prompt not found");
-    return row;
+/** The whole catalog (~500 rows), cached in memory: every vault request ranks all of it. */
+export const allPrompts = (db: Db) => db.cached(PROMPTS_CACHE, PROMPTS_TTL_MS, () => db.all<PromptRow>("SELECT * FROM prompts"));
+
+export function createService(db: Db) {
+  let idfCache: { rows: PromptRow[]; idf: Idf } | undefined;
+  const catalog = () => allPrompts(db);
+
+  async function requirePrompt(id: number): Promise<void> {
+    if (!(await db.get("SELECT 1 AS ok FROM prompts WHERE id = ?", id))) throw new HttpError(404, "Prompt not found");
   }
 
   function collectionsOf(rows: PromptRow[]): CollectionInfo[] {
@@ -89,13 +67,21 @@ export function createService(db: DatabaseSync) {
   }
 
   return {
-    vault(visitor: string, q: VaultQuery): VaultResponse {
-      const rows = stmts.allPrompts.all() as PromptRow[];
-      const saved = new Set((stmts.savesFor.all(visitor) as { prompt_id: number }[]).map((r) => r.prompt_id));
-      const votes = new Map((stmts.votesFor.all(visitor) as { prompt_id: number; worked: number }[]).map((r) => [r.prompt_id, r.worked]));
+    async vault(visitor: string, q: VaultQuery): Promise<VaultResponse> {
+      // One round trip for everything personal, plus the cached catalog.
+      const [rows, [saves, votesRows, subCount]] = await Promise.all([
+        catalog(),
+        db.batch<Record<string, number>>([
+          { sql: "SELECT prompt_id FROM saves WHERE visitor_id = ?", args: [visitor] },
+          { sql: "SELECT prompt_id, worked FROM votes WHERE visitor_id = ?", args: [visitor] },
+          { sql: "SELECT COUNT(*) AS n FROM submissions" },
+        ], "read") as Promise<Record<string, number>[][]>,
+      ]);
+      const saved = new Set(saves!.map((r) => r.prompt_id!));
+      const votes = new Map(votesRows!.map((r) => [r.prompt_id!, r.worked!]));
       const query = q.q.trim();
       const now = Date.now();
-      if (!idfCache || idfCache.size !== rows.length) idfCache = { size: rows.length, idf: buildIdf(rows.map(toRankable)) };
+      if (!idfCache || idfCache.rows !== rows) idfCache = { rows, idf: buildIdf(rows.map(toRankable)) };
       const idf = idfCache.idf;
 
       const toDTO = (r: PromptRow): PromptDTO => {
@@ -104,7 +90,7 @@ export function createService(db: DatabaseSync) {
           id: r.id, title: r.title, masterPrompt: r.master_prompt, collection: r.collection, category: r.category,
           section: r.section, tool: r.tool, useCases: JSON.parse(r.use_cases), variables: JSON.parse(r.variables),
           viralScore: r.viral_score, copyCount: r.copy_count, workedVotes: r.worked_votes, totalVotes: r.total_votes,
-          successRate: r.total_votes > 0 ? Math.round((r.worked_votes / r.total_votes) * 100) : 75,
+          successRate: successRate(r.worked_votes, r.total_votes),
           saved: saved.has(r.id), myVote: vote === undefined ? null : vote ? "worked" : "failed",
           createdAt: new Date(r.created_at).toISOString(),
           score: scorePrompt(toRankable(r), query, now, idf),
@@ -135,72 +121,94 @@ export function createService(db: DatabaseSync) {
           total: rows.length,
           savedCount: saved.size,
           totalCopies: rows.reduce((a, r) => a + r.copy_count, 0),
-          submissions: Number((stmts.submissionCount.get() as { n: number }).n),
+          submissions: Number(subCount![0]!.n),
         },
         collections: collectionsOf(rows),
       };
     },
 
-    recordCopy(id: number): { copyCount: number } {
-      requirePrompt(id);
-      const r = stmts.incCopy.get(id) as { copy_count: number };
+    async recordCopy(id: number): Promise<{ copyCount: number }> {
+      const r = await db.get<{ copy_count: number }>("UPDATE prompts SET copy_count = copy_count + 1 WHERE id = ? RETURNING copy_count", id);
+      if (!r) throw new HttpError(404, "Prompt not found");
+      db.invalidate(PROMPTS_CACHE);
       return { copyCount: r.copy_count };
     },
 
-    toggleSave(visitor: string, id: number): { saved: boolean } {
-      requirePrompt(id);
-      if (stmts.getSave.get(visitor, id)) {
-        stmts.delSave.run(visitor, id);
-        return { saved: false };
-      }
-      stmts.addSave.run(visitor, id, Date.now());
+    async toggleSave(visitor: string, id: number): Promise<{ saved: boolean }> {
+      await requirePrompt(id);
+      if ((await db.run("DELETE FROM saves WHERE visitor_id = ? AND prompt_id = ?", visitor, id)).changes > 0) return { saved: false };
+      await db.run("INSERT OR IGNORE INTO saves (visitor_id, prompt_id, created_at) VALUES (?, ?, ?)", visitor, id, Date.now());
       return { saved: true };
     },
 
     /** One vote per visitor per prompt; changing your vote moves it rather than adding another. */
-    vote(visitor: string, id: number, worked: boolean): { successRate: number; myVote: "worked" | "failed" } {
-      requirePrompt(id);
-      transaction(db, () => {
-        const prev = stmts.getVote.get(visitor, id) as { worked: number } | undefined;
-        const w = worked ? 1 : 0;
-        if (!prev) stmts.bumpVotes.run(1, w, id);
-        else if (prev.worked !== w) stmts.bumpVotes.run(0, w ? 1 : -1, id);
-        stmts.upsertVote.run(visitor, id, w, Date.now());
-      });
-      const row = requirePrompt(id);
-      return {
-        successRate: row.total_votes > 0 ? Math.round((row.worked_votes / row.total_votes) * 100) : 75,
-        myVote: worked ? "worked" : "failed",
-      };
+    async vote(visitor: string, id: number, worked: boolean): Promise<{ successRate: number; myVote: "worked" | "failed" }> {
+      await requirePrompt(id);
+      const w = worked ? 1 : 0;
+      const prev = "(SELECT worked FROM votes WHERE visitor_id = ?1 AND prompt_id = ?2)";
+      // Atomic: the counter update reads the previous vote, then the vote is upserted.
+      const res = await db.batch<{ worked_votes: number; total_votes: number }>([
+        {
+          sql: `UPDATE prompts SET
+                  total_votes  = total_votes  + CASE WHEN ${prev} IS NULL THEN 1 ELSE 0 END,
+                  worked_votes = worked_votes + CASE WHEN ${prev} IS NULL THEN ?3 WHEN ${prev} = ?3 THEN 0 WHEN ?3 = 1 THEN 1 ELSE -1 END
+                WHERE id = ?2`,
+          args: [visitor, id, w],
+        },
+        {
+          sql: `INSERT INTO votes (visitor_id, prompt_id, worked, created_at) VALUES (?, ?, ?, ?)
+                ON CONFLICT(visitor_id, prompt_id) DO UPDATE SET worked = excluded.worked`,
+          args: [visitor, id, w, Date.now()],
+        },
+        { sql: "SELECT worked_votes, total_votes FROM prompts WHERE id = ?", args: [id] },
+      ]);
+      db.invalidate(PROMPTS_CACHE);
+      const row = res[2]![0]!;
+      return { successRate: successRate(row.worked_votes, row.total_votes), myVote: worked ? "worked" : "failed" };
     },
 
-    submit(visitor: string, url: string, note: string, category: string): { id: number } {
-      const r = stmts.addSubmission.get(visitor, url, note, category, Date.now()) as { id: number };
-      return { id: r.id };
+    async submit(visitor: string, url: string, note: string, category: string): Promise<{ id: number }> {
+      const r = await db.get<{ id: number }>(
+        "INSERT INTO submissions (visitor_id, url, note, category, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?) RETURNING id",
+        visitor, url, note, category, Date.now(),
+      );
+      return { id: r!.id };
     },
 
-    mySubmissions(owner: string, limit: number): { submissions: SubmissionDTO[] } {
-      return { submissions: (stmts.mySubmissions.all(owner, limit) as SubmissionRow[]).map(toSubmissionDTO) };
+    async mySubmissions(owner: string, limit: number): Promise<{ submissions: SubmissionDTO[] }> {
+      const rows = await db.all<SubmissionRow>("SELECT * FROM submissions WHERE visitor_id = ? ORDER BY id DESC LIMIT ?", owner, limit);
+      return { submissions: rows.map(toSubmissionDTO) };
     },
 
     // --- admin ---------------------------------------------------------------
-    adminSubmissions(status: SubmissionStatus | "all", limit: number, offset: number): AdminSubmissionsResponse {
-      const rows = stmts.adminSubmissions.all(status, status, limit, offset) as SubmissionRow[];
+    async adminSubmissions(status: SubmissionStatus | "all", limit: number, offset: number): Promise<AdminSubmissionsResponse> {
+      const [rows, countRows] = await db.batch([
+        {
+          sql: `SELECT s.*, u.email FROM submissions s LEFT JOIN users u ON s.visitor_id = 'u:' || u.id
+                WHERE (? = 'all' OR s.status = ?) ORDER BY s.id DESC LIMIT ? OFFSET ?`,
+          args: [status, status, limit, offset],
+        },
+        { sql: "SELECT status, COUNT(*) AS n FROM submissions GROUP BY status" },
+      ], "read");
       const counts: Record<SubmissionStatus, number> = { pending: 0, added: 0, rejected: 0 };
-      for (const r of stmts.submissionCounts.all() as { status: string; n: number }[]) {
+      for (const r of countRows as { status: string; n: number }[]) {
         if (r.status in counts) counts[r.status as SubmissionStatus] = Number(r.n);
       }
-      return { submissions: rows.map((r) => ({ ...toSubmissionDTO(r), submittedBy: r.email ?? null })), counts };
+      return { submissions: (rows as SubmissionRow[]).map((r) => ({ ...toSubmissionDTO(r), submittedBy: r.email ?? null })), counts };
     },
 
-    setSubmissionStatus(id: number, status: SubmissionStatus): AdminSubmissionDTO {
-      if (Number(stmts.setSubmissionStatus.run(status, id).changes) === 0) throw new HttpError(404, "Submission not found");
-      const r = stmts.submissionById.get(id) as SubmissionRow;
+    async setSubmissionStatus(id: number, status: SubmissionStatus): Promise<AdminSubmissionDTO> {
+      const res = await db.batch<SubmissionRow>([
+        { sql: "UPDATE submissions SET status = ? WHERE id = ?", args: [status, id] },
+        { sql: "SELECT s.*, u.email FROM submissions s LEFT JOIN users u ON s.visitor_id = 'u:' || u.id WHERE s.id = ?", args: [id] },
+      ]);
+      const r = res[1]![0];
+      if (!r) throw new HttpError(404, "Submission not found");
       return { ...toSubmissionDTO(r), submittedBy: r.email ?? null };
     },
 
-    categories(): Set<string> {
-      return new Set((db.prepare("SELECT DISTINCT category FROM prompts").all() as { category: string }[]).map((r) => r.category));
+    async categories(): Promise<Set<string>> {
+      return new Set((await catalog()).map((r) => r.category));
     },
   };
 }

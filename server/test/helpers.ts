@@ -1,13 +1,13 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { DatabaseSync } from "node:sqlite";
+import type { Db } from "../src/db.ts";
 import { createService } from "../src/api.ts";
 import { createApp, type AppOptions } from "../src/app.ts";
 import { createAuth, type AuthOptions } from "../src/auth.ts";
 
 export const TEST_SECRET = "test-secret-test-secret-test-secret-0123456789";
 
-export async function startServer(db: DatabaseSync, opts: Partial<AppOptions> & { authOptions?: Partial<AuthOptions> } = {}) {
+export async function startServer(db: Db, opts: Partial<AppOptions> & { authOptions?: Partial<AuthOptions> } = {}) {
   const auth = createAuth(db, { jwtSecret: TEST_SECRET, ...opts.authOptions });
   const server: Server = createServer(createApp({ service: createService(db), auth, ...opts }));
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));

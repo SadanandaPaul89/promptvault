@@ -6,14 +6,15 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# --- runtime: zero npm dependencies needed by the server ----------------------
+# --- runtime: server + its one dependency (@libsql/client) --------------------
 FROM node:24-alpine
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3000 \
     DATABASE_PATH=/data/promptvault.db \
     TRUST_PROXY=1
-COPY package.json ./
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 COPY server ./server
 COPY --from=build /app/dist ./dist
 RUN mkdir -p /data && chown node:node /data

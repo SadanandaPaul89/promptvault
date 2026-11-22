@@ -9,7 +9,7 @@ Users search in plain words and fill in the `[variables]`; the prompt updates as
 
 ## Run locally
 
-Requires **Node 22.18+** (Node 24 recommended). The server runs TypeScript directly and uses Node's built-in SQLite, so it has no runtime dependencies.
+Requires **Node 22.18+** (Node 24 recommended). The server runs TypeScript directly. Its one runtime dependency is `@libsql/client`: locally it uses a SQLite file in `data/`, and in production it can point at [Turso](https://turso.tech) (hosted SQLite) instead, with the same SQL.
 
 ```bash
 npm install
@@ -27,23 +27,32 @@ Other scripts: `npm test` (API and ranking tests) and `npm run typecheck`.
 
 ## Deploy
 
-### Render (API + database) and Vercel (website)
+### Free: Vercel (website) + Render (API) + Turso (database)
 
-The website is served from Vercel. Vercel forwards every `/api/*` request to Render ([vercel.json](vercel.json)), so the browser only ever talks to one origin and the login cookies stay first-party.
+All three have free plans and none needs a card.
 
-1. **Render:** Dashboard → **New → Blueprint** → choose this repo. [render.yaml](render.yaml) creates `promptvault-api` with a 1 GB disk for SQLite and generates `JWT_SECRET`. When asked, enter:
-   - `ADMIN_EMAILS`: your email.
-   - `ALLOWED_ORIGINS`: your Vercel URL, e.g. `https://promptvault.vercel.app`. You can fill it in after step 2 and redeploy.
-   Wait for the deploy, then open `https://promptvault-api.onrender.com/api/health`.
-2. **Vercel:** **Add New → Project** → import this repo and keep the defaults (`vercel.json` sets the build). If Render gave the service a different URL than `promptvault-api.onrender.com`, change the `/api` rewrite in `vercel.json` first.
-3. Open the Vercel URL, create an account with your `ADMIN_EMAILS` address, and the Admin tab appears.
+- **Vercel** serves the website and forwards every `/api/*` request to Render ([vercel.json](vercel.json)), so the browser only ever talks to one origin and the login cookies stay first-party.
+- **Render** runs the API on its free plan ([render.yaml](render.yaml)). Free instances have no persistent disk, so the data lives in Turso.
+- **Turso** holds the database. The free tier is 5 GB, far more than this app needs.
 
-Every push to `main` redeploys both. The Render site also works on its own at its `onrender.com` URL.
+1. **Turso:** sign up at [turso.tech](https://turso.tech) and install the CLI, or use the dashboard. Create the database in the region nearest your Render region (Singapore → `aws-ap-south-1` Mumbai or the closest listed):
+   ```bash
+   turso db create promptvault
+   turso db show promptvault --url       # → TURSO_DATABASE_URL
+   turso db tokens create promptvault    # → TURSO_AUTH_TOKEN
+   ```
+   The server creates the tables and loads the 524 prompts on its first start.
+2. **Render:** Dashboard → **New → Blueprint** → choose this repo. It creates `promptvault-api` on the free plan and generates `JWT_SECRET`. When asked, enter `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `ADMIN_EMAILS` (your email) and `ALLOWED_ORIGINS` (your Vercel URL, e.g. `https://promptvault.vercel.app`; you can fill it in after step 3). Then check `https://promptvault-api.onrender.com/api/health`.
+3. **Vercel:** **Add New → Project** → import this repo and keep the defaults. If Render gave the service a different URL than `promptvault-api.onrender.com`, change the `/api` rewrite in `vercel.json` first.
+4. Open the Vercel URL and create an account with your `ADMIN_EMAILS` address. The Admin tab appears.
+
+Every push to `main` redeploys Render and Vercel.
 
 **Notes:**
-- A persistent disk needs Render's paid Starter plan. On the free plan the database (accounts, saves, submissions) is wiped on every restart.
-- Reel transcription (whisper.cpp) isn't installed on Render, so the extension's analyses use the caption and OCR text only.
-- For the extension, set `API_BASE` in [extension/config.js](extension/config.js) and the matching `host_permissions` entry in `manifest.json` to the Render URL. It calls Render directly because Vercel limits proxied request bodies, and reel audio can be several MB.
+- **Sleeping:** Render's free plan stops the API after 15 minutes without traffic, and the next visit waits about a minute. [keep-awake.yml](.github/workflows/keep-awake.yml) pings it every 10 minutes from GitHub Actions to prevent that (free for public repos; one always-on service fits in Render's 750 free hours a month). If Render's URL differs, set the repo variable `RENDER_URL`. GitHub pauses scheduled workflows after 60 days without commits; re-enable it from the Actions tab.
+- **Speed:** each API request goes Render → Turso over the network, so keep both in nearby regions. The prompt catalog is cached in the server's memory, so browsing costs one small query per request.
+- **Reels:** whisper.cpp isn't installed on Render, so the extension's analyses use the caption and on-screen text only.
+- **Extension:** set `API_BASE` in [extension/config.js](extension/config.js) and the matching `host_permissions` entry in `manifest.json` to the Render URL. It calls Render directly because Vercel limits proxied request bodies, and reel audio can be several MB.
 
 ### Other hosts
 
@@ -51,7 +60,7 @@ SQLite needs a **persistent disk**, so pick a host that provides one:
 
 - **Docker** (any VPS, Fly.io, Railway, Render): `docker build -t promptvault .` then
   `docker run -p 3000:3000 -v promptvault-data:/data promptvault`
-- **Render / Railway without Docker**: build command `npm ci && npm run build`, start command `npm start`, and set `DATABASE_PATH` to a path on the attached disk. Set `TRUST_PROXY=1`.
+- **Any Node host with a disk**: build command `npm ci --include=dev && npm run build`, start command `npm start`, and set `DATABASE_PATH` to a path on the persistent disk. Set `TRUST_PROXY=1`. Without a disk, use Turso as above.
 
 Environment variables are listed in `.env.example`. The health check is `GET /api/health`.
 
@@ -135,6 +144,6 @@ legacy/            the original Hatch/Muse-runtime version, kept for reference
 
 ## Privacy and limits
 
-- There are no accounts. Saves, votes and submissions are tied to an anonymous random id stored in the visitor's browser.
+- Saves, votes and submissions belong to accounts (see above). The browser extension stays anonymous, identified by a random id stored in the extension.
 - Viral and copy numbers in the creator collection are curated starting signals, not measured data. The PM library starts at zero.
 - Submitted links go into a `pending` queue in the `submissions` table. Extraction is manual for now (see `CLAUDE-AUTOMATION-PROMPTS.md`, Prompt 8).
