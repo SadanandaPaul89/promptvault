@@ -8,6 +8,7 @@ import { createService } from "./api.ts";
 import { createApp } from "./app.ts";
 import { createAnalyzer } from "./analyze.ts";
 import { createAuth } from "./auth.ts";
+import { createPromptAdmin } from "./admin-prompts.ts";
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => Promise<void>;
 
@@ -21,6 +22,7 @@ async function init(): Promise<Handler> {
     auth: createAuth(db, { jwtSecret: env.JWT_SECRET!, adminEmails: (env.ADMIN_EMAILS ?? "").split(",") }),
     // No whisper.cpp on Vercel: reels are analysed from caption + on-screen text.
     analyzer: createAnalyzer(db),
+    promptAdmin: createPromptAdmin(db),
     adminToken: env.ADMIN_TOKEN || undefined,
     trustProxy: true, // Vercel sets X-Forwarded-For / -Proto
     allowedOrigins: (env.ALLOWED_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean),

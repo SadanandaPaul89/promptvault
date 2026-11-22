@@ -171,8 +171,8 @@ export function createAnalyzer(db: Db, opts: { transcriber?: Transcriber } = {})
           const useCases = [row.platform, cand.category.toLowerCase(), ...(row.creator ? [`by ${row.creator}`] : [])];
           const r = await tx.get<{ id: number }>(
             `INSERT INTO prompts (seed_key, title, master_prompt, collection, category, section, tool, use_cases, variables,
-                                  viral_score, copy_count, worked_votes, total_votes, created_at)
-             VALUES (NULL,?,?,?,?,?,?,?,?,?,0,0,0,?) RETURNING id`,
+                                  viral_score, copy_count, worked_votes, total_votes, created_at, source)
+             VALUES (NULL,?,?,?,?,?,?,?,?,?,0,0,0,?,'extension') RETURNING id`,
             cand.title, cand.masterPrompt, ANALYZED_COLLECTION, cand.category, cand.category, cand.tool,
             JSON.stringify(useCases), JSON.stringify(cand.variables), Math.min(100, 50 + row.request_count * 2), now,
           );

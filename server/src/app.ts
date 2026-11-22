@@ -6,6 +6,7 @@ import type { TLSSocket } from "node:tls";
 import { ACCESS_COOKIE, AuthError, REFRESH_COOKIE, cookie, parseCookies, type Auth, type Tokens } from "./auth.ts";
 import { HttpError, type Service } from "./api.ts";
 import type { Analyzer } from "./analyze.ts";
+import type { PromptAdmin } from "./admin-prompts.ts";
 import { ALL, type AnalysisStatus, type SubmissionStatus, type UserDTO } from "./types.ts";
 
 export type AppOptions = {
@@ -14,6 +15,8 @@ export type AppOptions = {
   auth: Auth;
   /** Post analyzer (browser extension backend). Routes 404 when omitted. */
   analyzer?: Analyzer;
+  /** Admin prompt management (add / bulk import / delete). Routes 404 when omitted. */
+  promptAdmin?: PromptAdmin;
   /** Bearer token for /api/admin/* moderation routes. Disabled when unset. */
   adminToken?: string;
   /** Built client directory (vite build output). Optional in dev/tests. */
@@ -62,6 +65,8 @@ const MAX_BODY = 16 * 1024;
 /** Analyze requests carry post text, OCR text and up to ~90 s of base64 audio. */
 const MAX_ANALYZE_BODY = 8 * 1024 * 1024;
 const MAX_AUDIO_BYTES = 5 * 1024 * 1024;
+/** Bulk prompt imports: up to 1,000 prompts per request. */
+const MAX_IMPORT_BODY = 3 * 1024 * 1024;
 const AUDIO_MIME = /^audio\/(webm|ogg|mp4|mpeg|wav)(;.*)?$/;
 const SUBMISSION_STATUSES = new Set<SubmissionStatus>(["pending", "added", "rejected"]);
 const STATUSES = new Set<AnalysisStatus>(["pending", "approved", "rejected", "no_prompt", "dm_gated"]);
@@ -85,7 +90,7 @@ class RateLimiter {
   }
 }
 
-export function createApp({ service, auth, analyzer, adminToken, staticDir, trustProxy = false, allowedOrigins: extraOrigins = [] }: AppOptions) {
+export function createApp({ service, auth, analyzer, promptAdmin, adminToken, staticDir, trustProxy = false, allowedOrigins: extraOrigins = [] }: AppOptions) {
   const allowedOrigins = new Set(extraOrigins);
   const limiter = new RateLimiter();
   const root = staticDir ? resolve(staticDir) : undefined;
@@ -143,17 +148,18 @@ export function createApp({ service, auth, analyzer, adminToken, staticDir, trus
 
   const owner = (u: UserDTO) => `u:${u.id}`;
 
-  /** Admins (by role), or the ADMIN_TOKEN bearer token for scripts. */
-  async function requireAdmin(req: IncomingMessage) {
+  /** Admins (by role), or the ADMIN_TOKEN bearer token for scripts. Returns who it was, for audit fields. */
+  async function requireAdmin(req: IncomingMessage): Promise<string> {
     const header = String(req.headers.authorization ?? "");
     if (adminToken && header) {
       const got = Buffer.from(header);
       const want = Buffer.from(`Bearer ${adminToken}`);
-      if (got.length === want.length && timingSafeEqual(got, want)) return;
+      if (got.length === want.length && timingSafeEqual(got, want)) return "admin-token";
       throw new HttpError(401, "Unauthorized");
     }
     const u = await requireUser(req);
     if (u.role !== "admin") throw new AuthError(403, "forbidden", "Admins only.");
+    return u.email;
   }
 
   /** CSRF defence in depth (cookies are already SameSite=Strict): state changes must come from this origin. */
@@ -376,6 +382,25 @@ export function createApp({ service, auth, analyzer, adminToken, staticDir, trus
       const body = await readJson(req);
       if (typeof body.status !== "string" || !SUBMISSION_STATUSES.has(body.status as SubmissionStatus)) throw new HttpError(400, "status must be pending, added or rejected");
       return send(res, 200, await service.setSubmissionStatus(Number(sm[1]), body.status as SubmissionStatus));
+    }
+
+    // --- admin: add / import / delete prompts --------------------------------------
+    if (promptAdmin && path === "/api/admin/prompts" && method === "POST") {
+      const who = await requireAdmin(req);
+      const body = await readJson(req, MAX_IMPORT_BODY);
+      const d = (body.defaults ?? {}) as Record<string, unknown>;
+      const defaults = { collection: str(d.collection, 60), category: str(d.category, 60), tool: str(d.tool, 40) };
+      const result = await promptAdmin.importPrompts(body.prompts, defaults, body.dryRun === true, who);
+      return send(res, result.dryRun ? 200 : 201, result);
+    }
+    if (promptAdmin && path === "/api/admin/prompts" && method === "GET") {
+      await requireAdmin(req);
+      return send(res, 200, await promptAdmin.recent(int(url.searchParams.get("limit"), 30, 1, 200)));
+    }
+    const pm = path.match(/^\/api\/admin\/prompts\/(\d{1,9})$/);
+    if (promptAdmin && pm && method === "DELETE") {
+      await requireAdmin(req);
+      return send(res, 200, await promptAdmin.remove(Number(pm[1])));
     }
 
     // --- admin: post analyses (role admin or ADMIN_TOKEN) ------------------------

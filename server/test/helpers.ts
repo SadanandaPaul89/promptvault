@@ -4,12 +4,13 @@ import type { Db } from "../src/db.ts";
 import { createService } from "../src/api.ts";
 import { createApp, type AppOptions } from "../src/app.ts";
 import { createAuth, type AuthOptions } from "../src/auth.ts";
+import { createPromptAdmin } from "../src/admin-prompts.ts";
 
 export const TEST_SECRET = "test-secret-test-secret-test-secret-0123456789";
 
 export async function startServer(db: Db, opts: Partial<AppOptions> & { authOptions?: Partial<AuthOptions> } = {}) {
   const auth = createAuth(db, { jwtSecret: TEST_SECRET, ...opts.authOptions });
-  const server: Server = createServer(createApp({ service: createService(db), auth, ...opts }));
+  const server: Server = createServer(createApp({ service: createService(db), auth, promptAdmin: createPromptAdmin(db), ...opts }));
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   return { server, base, auth, close: () => new Promise<void>((r) => server.close(() => r())) };

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, type AdminAnalysis, type SubmissionStatus } from "./api";
 import { useAuth } from "./auth";
+import { AddPrompts } from "./admin-prompts";
 
 const PAGE = 25;
 export const STATUS_LABEL: Record<SubmissionStatus, string> = { pending: "In review", added: "Approved", rejected: "Declined" };
@@ -29,13 +30,13 @@ export function usePendingCounts(enabled: boolean) {
 
 export function AdminView() {
   const pending = usePendingCounts(true);
-  const [section, setSection] = useState<"submissions" | "analyses">(() => (pending.links === 0 && pending.analyses > 0 ? "analyses" : "submissions"));
+  const [section, setSection] = useState<"submissions" | "analyses" | "add">(() => (pending.links === 0 && pending.analyses > 0 ? "analyses" : "submissions"));
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
         <div>
           <h2 className="font-display text-2xl font-bold">Admin</h2>
-          <p className="text-sm text-[var(--dim)] mt-1">Approve or decline links people submitted, and prompts the browser extension found.</p>
+          <p className="text-sm text-[var(--dim)] mt-1">Review submitted links and extension finds, and add your own prompts.</p>
         </div>
         <div className="segmented" role="tablist" aria-label="Admin sections">
           <button type="button" role="tab" aria-selected={section === "submissions"} aria-pressed={section === "submissions"} onClick={() => setSection("submissions")}>
@@ -44,9 +45,10 @@ export function AdminView() {
           <button type="button" role="tab" aria-selected={section === "analyses"} aria-pressed={section === "analyses"} onClick={() => setSection("analyses")}>
             Extension analyses{pending.analyses > 0 && <span className="tab-count ml-1.5">{pending.analyses}</span>}
           </button>
+          <button type="button" role="tab" aria-selected={section === "add"} aria-pressed={section === "add"} onClick={() => setSection("add")}>Add prompts</button>
         </div>
       </div>
-      {section === "submissions" ? <Submissions /> : <Analyses />}
+      {section === "submissions" ? <Submissions /> : section === "analyses" ? <Analyses /> : <AddPrompts />}
     </div>
   );
 }

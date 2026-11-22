@@ -106,3 +106,32 @@ export type AnalysisDTO = {
 export type AnalysisLookup = AnalysisDTO | { found: false; key: string };
 
 export const ALL = "All";
+
+// --- admin: adding prompts (see docs/IMPORTING-PROMPTS.md) -----------------------
+
+export type ImportDefaults = { collection?: string; category?: string; tool?: string };
+
+export type ImportRowResult = {
+  /** 1-based, matching the row number in the admin's file (header excluded). */
+  row: number;
+  status: "new" | "duplicate" | "invalid";
+  errors: string[];
+  warnings: string[];
+  title: string;
+  collection: string;
+  category: string;
+  tool: string;
+  variables: string[];
+  /** Set after a real (non-dry) import. */
+  id?: number;
+};
+
+export type ImportResult = {
+  dryRun: boolean;
+  rows: ImportRowResult[];
+  summary: { total: number; new: number; duplicate: number; invalid: number; imported: number };
+};
+
+export type AdminPromptDTO = {
+  id: number; title: string; collection: string; category: string; tool: string; source: string; createdAt: string;
+};

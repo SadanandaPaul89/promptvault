@@ -70,7 +70,9 @@ Environment variables are listed in `.env.example`. The health check is `GET /ap
 
 ## Adding prompts
 
-Drop a JSON file into `server/seed/` in the same shape as `pm-library-seed.json` and import it and add it to `SEED_COLLECTIONS` in [server/src/db.ts](server/src/db.ts). Seeding runs on every boot and is idempotent: new prompts are added, and existing ones (with their real votes and copies) are never overwritten.
+**From the Admin panel (no deploy needed):** **Admin → Add prompts** adds one prompt with a form, or imports up to 1,000 at once from a CSV or JSON file. Each file is checked row by row before anything is saved, and duplicates are skipped. The file format is documented in [docs/IMPORTING-PROMPTS.md](docs/IMPORTING-PROMPTS.md), and templates can be downloaded from the import screen.
+
+**As built-in collections (in code):** drop a JSON file into `server/seed/` in the same shape as `pm-library-seed.json`, import it in [server/src/db.ts](server/src/db.ts) and add it to `SEED_COLLECTIONS`. Seeding runs on startup when the seed files change and is idempotent: new prompts are added, and existing ones (with their real votes and copies) are never overwritten.
 
 ## Ranking
 

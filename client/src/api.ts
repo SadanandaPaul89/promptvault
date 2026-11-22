@@ -1,9 +1,11 @@
 import type {
-  AdminSubmissionDTO, AdminSubmissionsResponse, AnalysisDTO, SubmissionDTO, SubmissionStatus, UserDTO, VaultResponse,
+  AdminPromptDTO, AdminSubmissionDTO, AdminSubmissionsResponse, AnalysisDTO, ImportDefaults, ImportResult, SubmissionDTO,
+  SubmissionStatus, UserDTO, VaultResponse,
 } from "../../server/src/types.ts";
 
 export type {
   PromptDTO, VaultResponse, SubmissionDTO, CollectionInfo, UserDTO, AdminSubmissionDTO, AdminSubmissionsResponse, SubmissionStatus,
+  AdminPromptDTO, ImportDefaults, ImportResult, ImportRowResult,
 } from "../../server/src/types.ts";
 
 // Sessions live in HttpOnly cookies set by the server; this file never sees a token.
@@ -104,4 +106,9 @@ export const api = {
   adminAnalyses: (status: string) => request<{ analyses: AdminAnalysis[] }>(`/api/admin/analyses?status=${status}&limit=50`),
   approveAnalysis: (id: number, keep: number[]) => request<AnalysisDTO>(`/api/admin/analyses/${id}/approve`, { method: "POST", body: { keep } }),
   rejectAnalysis: (id: number) => request<AnalysisDTO>(`/api/admin/analyses/${id}/reject`, { method: "POST" }),
+  /** Validate (dryRun) or import prompts. Rows use the documented field names (or their aliases). */
+  importPrompts: (prompts: Record<string, unknown>[], defaults: ImportDefaults, dryRun: boolean) =>
+    request<ImportResult>("/api/admin/prompts", { method: "POST", body: { prompts, defaults, dryRun } }),
+  recentPrompts: () => request<{ prompts: AdminPromptDTO[] }>("/api/admin/prompts?limit=30"),
+  deletePrompt: (id: number) => request<{ deleted: true }>(`/api/admin/prompts/${id}`, { method: "DELETE" }),
 };

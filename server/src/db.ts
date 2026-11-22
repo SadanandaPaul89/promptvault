@@ -138,6 +138,12 @@ const MIGRATIONS: string[] = [
    CREATE INDEX idx_sessions_user ON sessions(user_id);
    CREATE INDEX idx_sessions_family ON sessions(family);
    CREATE INDEX idx_submissions_status ON submissions(status, id);`,
+  // v4 — where each prompt came from: 'seed' (built-in files), 'extension'
+  // (approved post analyses) or 'admin' (added in the Admin panel, by added_by).
+  `ALTER TABLE prompts ADD COLUMN source TEXT NOT NULL DEFAULT 'seed';
+   ALTER TABLE prompts ADD COLUMN added_by TEXT;
+   UPDATE prompts SET source = 'extension' WHERE seed_key IS NULL;
+   CREATE INDEX idx_prompts_source ON prompts(source, id);`,
 ];
 
 export type AnalysisRow = {

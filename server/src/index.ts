@@ -7,6 +7,7 @@ import { createApp } from "./app.ts";
 import { createAnalyzer } from "./analyze.ts";
 import { transcriberFromEnv } from "./stt.ts";
 import { createAuth } from "./auth.ts";
+import { createPromptAdmin } from "./admin-prompts.ts";
 import { randomBytes } from "node:crypto";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -40,6 +41,7 @@ const server = createServer(
     service: createService(db),
     auth,
     analyzer: createAnalyzer(db, { transcriber }),
+    promptAdmin: createPromptAdmin(db),
     adminToken: process.env.ADMIN_TOKEN || undefined,
     staticDir: STATIC_DIR,
     trustProxy: process.env.TRUST_PROXY === "1",
