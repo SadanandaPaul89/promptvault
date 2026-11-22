@@ -1,0 +1,35 @@
+# Render Blueprint: the API + SQLite database.
+# Dashboard → New → Blueprint → pick this repo. Render asks for the `sync: false` values.
+services:
+  - type: web
+    name: promptvault-api
+    runtime: node
+    # SQLite needs a persistent disk, and disks need a paid instance (Starter).
+    # On the free plan the database (accounts, saves, submissions) is wiped on every deploy/restart.
+    plan: starter
+    region: singapore
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "1"
+      - key: DATABASE_PATH
+        value: /var/data/promptvault.db
+      - key: JWT_SECRET
+        generateValue: true
+      # Your email(s), comma-separated: these accounts get the Admin tab.
+      - key: ADMIN_EMAILS
+        sync: false
+      # The Vercel site, e.g. https://promptvault.vercel.app (comma-separate several).
+      - key: ALLOWED_ORIGINS
+        sync: false

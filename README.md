@@ -27,6 +27,26 @@ Other scripts: `npm test` (API and ranking tests) and `npm run typecheck`.
 
 ## Deploy
 
+### Render (API + database) and Vercel (website)
+
+The website is served from Vercel. Vercel forwards every `/api/*` request to Render ([vercel.json](vercel.json)), so the browser only ever talks to one origin and the login cookies stay first-party.
+
+1. **Render:** Dashboard → **New → Blueprint** → choose this repo. [render.yaml](render.yaml) creates `promptvault-api` with a 1 GB disk for SQLite and generates `JWT_SECRET`. When asked, enter:
+   - `ADMIN_EMAILS`: your email.
+   - `ALLOWED_ORIGINS`: your Vercel URL, e.g. `https://promptvault.vercel.app`. You can fill it in after step 2 and redeploy.
+   Wait for the deploy, then open `https://promptvault-api.onrender.com/api/health`.
+2. **Vercel:** **Add New → Project** → import this repo and keep the defaults (`vercel.json` sets the build). If Render gave the service a different URL than `promptvault-api.onrender.com`, change the `/api` rewrite in `vercel.json` first.
+3. Open the Vercel URL, create an account with your `ADMIN_EMAILS` address, and the Admin tab appears.
+
+Every push to `main` redeploys both. The Render site also works on its own at its `onrender.com` URL.
+
+**Notes:**
+- A persistent disk needs Render's paid Starter plan. On the free plan the database (accounts, saves, submissions) is wiped on every restart.
+- Reel transcription (whisper.cpp) isn't installed on Render, so the extension's analyses use the caption and OCR text only.
+- For the extension, set `API_BASE` in [extension/config.js](extension/config.js) and the matching `host_permissions` entry in `manifest.json` to the Render URL. It calls Render directly because Vercel limits proxied request bodies, and reel audio can be several MB.
+
+### Other hosts
+
 SQLite needs a **persistent disk**, so pick a host that provides one:
 
 - **Docker** (any VPS, Fly.io, Railway, Render): `docker build -t promptvault .` then
