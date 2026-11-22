@@ -52,6 +52,8 @@ export type SubmissionDTO = {
   category: string;
   status: string;
   createdAt: string;
+  /** Vault prompts added (or linked) for this link when it was approved. */
+  prompts: { id: number; title: string }[];
 };
 
 export type UserDTO = { id: number; email: string; name: string; role: "user" | "admin" };
@@ -124,6 +126,8 @@ export type ImportRowResult = {
   variables: string[];
   /** Set after a real (non-dry) import. */
   id?: number;
+  /** For a duplicate of a prompt already in the vault: that prompt's id. */
+  existingId?: number;
 };
 
 export type ImportResult = {

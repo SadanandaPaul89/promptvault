@@ -101,8 +101,12 @@ export const api = {
   // --- admin ---
   adminSubmissions: (status: SubmissionStatus | "all", offset: number, limit: number) =>
     request<AdminSubmissionsResponse>(`/api/admin/submissions?status=${status}&offset=${offset}&limit=${limit}`),
-  setSubmissionStatus: (id: number, status: SubmissionStatus) =>
+  /** Decline, or undo a decision. Approving goes through approveSubmission. */
+  setSubmissionStatus: (id: number, status: Exclude<SubmissionStatus, "added">) =>
     request<AdminSubmissionDTO>(`/api/admin/submissions/${id}`, { method: "POST", body: { status } }),
+  /** Approve a link by adding the prompt(s) from that post (existing vault prompts get linked). */
+  approveSubmission: (id: number, prompts: Record<string, unknown>[]) =>
+    request<{ submission: AdminSubmissionDTO; result: ImportResult }>(`/api/admin/submissions/${id}/approve`, { method: "POST", body: { prompts } }),
   adminAnalyses: (status: string) => request<{ analyses: AdminAnalysis[] }>(`/api/admin/analyses?status=${status}&limit=50`),
   approveAnalysis: (id: number, keep: number[]) => request<AnalysisDTO>(`/api/admin/analyses/${id}/approve`, { method: "POST", body: { keep } }),
   rejectAnalysis: (id: number) => request<AnalysisDTO>(`/api/admin/analyses/${id}/reject`, { method: "POST" }),

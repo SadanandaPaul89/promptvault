@@ -13,10 +13,20 @@ function toRankable(r: PromptRow): RankablePrompt {
   };
 }
 
-type SubmissionRow = { id: number; url: string; note: string; category: string; status: string; created_at: number; email?: string | null };
-const toSubmissionDTO = (r: SubmissionRow): SubmissionDTO => ({
-  id: r.id, url: r.url, note: r.note, category: r.category, status: r.status, createdAt: new Date(r.created_at).toISOString(),
-});
+export type SubmissionRow = {
+  id: number; url: string; note: string; category: string; status: string; created_at: number; prompt_ids: string; email?: string | null;
+};
+
+/** Maps rows to DTOs, resolving linked prompt ids to titles (prompts deleted since are dropped). */
+export async function toSubmissionDTOs(db: Db, rows: SubmissionRow[]): Promise<AdminSubmissionDTO[]> {
+  const ids = rows.map((r) => JSON.parse(r.prompt_ids || "[]") as number[]);
+  const titles = ids.some((l) => l.length > 0) ? new Map((await allPrompts(db)).map((p) => [p.id, p.title])) : new Map<number, string>();
+  return rows.map((r, i): AdminSubmissionDTO => ({
+    id: r.id, url: r.url, note: r.note, category: r.category, status: r.status, createdAt: new Date(r.created_at).toISOString(),
+    prompts: ids[i]!.flatMap((id) => (titles.has(id) ? [{ id, title: titles.get(id)! }] : [])),
+    submittedBy: r.email ?? null,
+  }));
+}
 
 export class HttpError extends Error {
   readonly status: number;
@@ -177,7 +187,8 @@ export function createService(db: Db) {
 
     async mySubmissions(owner: string, limit: number): Promise<{ submissions: SubmissionDTO[] }> {
       const rows = await db.all<SubmissionRow>("SELECT * FROM submissions WHERE visitor_id = ? ORDER BY id DESC LIMIT ?", owner, limit);
-      return { submissions: rows.map(toSubmissionDTO) };
+      // The submitter never sees who else reviewed or submitted: drop the admin-only field.
+      return { submissions: (await toSubmissionDTOs(db, rows)).map(({ submittedBy: _, ...s }) => s) };
     },
 
     // --- admin ---------------------------------------------------------------
@@ -194,17 +205,22 @@ export function createService(db: Db) {
       for (const r of countRows as { status: string; n: number }[]) {
         if (r.status in counts) counts[r.status as SubmissionStatus] = Number(r.n);
       }
-      return { submissions: (rows as SubmissionRow[]).map((r) => ({ ...toSubmissionDTO(r), submittedBy: r.email ?? null })), counts };
+      return { submissions: await toSubmissionDTOs(db, rows as SubmissionRow[]), counts };
     },
 
-    async setSubmissionStatus(id: number, status: SubmissionStatus): Promise<AdminSubmissionDTO> {
+    /**
+     * Decline, or undo a decision (back to pending). Approving goes through
+     * PromptAdmin.approveSubmission, because an approval must add prompts.
+     * Undoing an approval unlinks its prompts but leaves them in the vault.
+     */
+    async setSubmissionStatus(id: number, status: Exclude<SubmissionStatus, "added">): Promise<AdminSubmissionDTO> {
       const res = await db.batch<SubmissionRow>([
-        { sql: "UPDATE submissions SET status = ? WHERE id = ?", args: [status, id] },
+        { sql: "UPDATE submissions SET status = ?, prompt_ids = '[]' WHERE id = ?", args: [status, id] },
         { sql: "SELECT s.*, u.email FROM submissions s LEFT JOIN users u ON s.visitor_id = 'u:' || u.id WHERE s.id = ?", args: [id] },
       ]);
       const r = res[1]![0];
       if (!r) throw new HttpError(404, "Submission not found");
-      return { ...toSubmissionDTO(r), submittedBy: r.email ?? null };
+      return (await toSubmissionDTOs(db, [r]))[0]!;
     },
 
     async categories(): Promise<Set<string>> {

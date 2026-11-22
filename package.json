@@ -11,12 +11,13 @@
     "dev": "concurrently -k -n api,web -c yellow,cyan \"npm:dev:server\" \"npm:dev:client\"",
     "dev:server": "node --watch --disable-warning=ExperimentalWarning server/src/index.ts",
     "dev:client": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/build-extension.mjs",
     "start": "node --disable-warning=ExperimentalWarning server/src/index.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p server/tsconfig.json",
     "test": "node --disable-warning=ExperimentalWarning --test \"server/test/**/*.test.ts\"",
     "ext:vendor": "node scripts/vendor-extension.mjs",
-    "build:vercel": "vite build && node scripts/build-vercel.mjs"
+    "build:vercel": "vite build && node scripts/build-extension.mjs && node scripts/build-vercel.mjs",
+    "ext:zip": "node scripts/build-extension.mjs"
   },
   "dependencies": {
     "@libsql/client": "0.18.0",

@@ -144,6 +144,9 @@ const MIGRATIONS: string[] = [
    ALTER TABLE prompts ADD COLUMN added_by TEXT;
    UPDATE prompts SET source = 'extension' WHERE seed_key IS NULL;
    CREATE INDEX idx_prompts_source ON prompts(source, id);`,
+  // v5 — an approved submitted link records the vault prompts the admin added
+  // (or linked) for it, so the submitter can open them.
+  `ALTER TABLE submissions ADD COLUMN prompt_ids TEXT NOT NULL DEFAULT '[]';`,
 ];
 
 export type AnalysisRow = {

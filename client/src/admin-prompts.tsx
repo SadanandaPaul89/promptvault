@@ -8,7 +8,7 @@ const KNOWN_TOOLS = ["Any AI", "ChatGPT", "Claude", "Gemini", "Nano Banana", "Ch
 const fmtDate = (iso: string) => new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
 /** Existing collections and their categories, for the pickers. */
-function useCatalog() {
+export function useCatalog() {
   const q = useQuery({
     queryKey: ["admin-catalog"],
     queryFn: () => api.vault({ q: "", collection: "All", category: "All", savedOnly: false, offset: 0, limit: 1 }),
@@ -17,7 +17,7 @@ function useCatalog() {
   return q.data?.collections ?? [];
 }
 
-function useAfterChange() {
+export function useAfterChange() {
   const qc = useQueryClient();
   return () => {
     qc.invalidateQueries({ queryKey: ["vault"] });
@@ -45,7 +45,7 @@ export function AddPrompts() {
 
 // ---------------------------------------------------------------- shared pickers
 
-function CollectionFields({ value, onChange, idPrefix, requiredNote }: {
+export function CollectionFields({ value, onChange, idPrefix, requiredNote }: {
   value: ImportDefaults; onChange: (v: ImportDefaults) => void; idPrefix: string; requiredNote?: string;
 }) {
   const collections = useCatalog();
@@ -73,7 +73,7 @@ function CollectionFields({ value, onChange, idPrefix, requiredNote }: {
   );
 }
 
-function VariableChips({ prompt }: { prompt: string }) {
+export function VariableChips({ prompt }: { prompt: string }) {
   const vars = detectVariables(prompt);
   if (!prompt.trim()) return null;
   return (

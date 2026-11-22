@@ -7,8 +7,8 @@
 
 import { createHash } from "node:crypto";
 import type { Db, Stmt } from "./db.ts";
-import { HttpError, PROMPTS_CACHE, allPrompts } from "./api.ts";
-import type { AdminPromptDTO, ImportDefaults, ImportResult, ImportRowResult } from "./types.ts";
+import { HttpError, PROMPTS_CACHE, allPrompts, toSubmissionDTOs, type SubmissionRow } from "./api.ts";
+import type { AdminPromptDTO, AdminSubmissionDTO, ImportDefaults, ImportResult, ImportRowResult } from "./types.ts";
 
 export const MAX_IMPORT_ROWS = 1000;
 export const DEFAULT_TOOL = "Any AI";
@@ -137,7 +137,32 @@ function validate(raw: unknown, defaults: ImportDefaults) {
 }
 
 export function createPromptAdmin(db: Db) {
-  return {
+  const admin = {
+    /**
+     * Approves a submitted link by adding the prompt(s) found in that post.
+     * Prompts already in the vault are linked instead of added again. Nothing is
+     * written if any prompt is invalid. The submitter then sees the prompts.
+     */
+    async approveSubmission(id: number, rows: unknown, defaults: ImportDefaults, addedBy: string): Promise<{ submission: AdminSubmissionDTO; result: ImportResult }> {
+      const sub = await db.get<{ status: string }>("SELECT status FROM submissions WHERE id = ?", id);
+      if (!sub) throw new HttpError(404, "Submission not found");
+      if (sub.status !== "pending") throw new HttpError(409, `This link is already ${sub.status === "added" ? "approved" : "declined"}. Undo that first.`);
+
+      const check = await admin.importPrompts(rows, defaults, true, addedBy);
+      const bad = check.rows.filter((r) => r.status === "invalid");
+      if (bad.length) throw new HttpError(400, bad.map((r) => `Prompt ${r.row}: ${r.errors.join(" ")}`).join(" "));
+
+      const result = await admin.importPrompts(rows, defaults, false, addedBy);
+      const ids = [...new Set(result.rows.flatMap((r) => r.id ?? r.existingId ?? []))];
+      if (ids.length === 0) throw new HttpError(400, "Add at least one prompt from this post, or decline it.");
+
+      const res = await db.batch<SubmissionRow>([
+        { sql: "UPDATE submissions SET status = 'added', prompt_ids = ? WHERE id = ? AND status = 'pending'", args: [JSON.stringify(ids), id] },
+        { sql: "SELECT s.*, u.email FROM submissions s LEFT JOIN users u ON s.visitor_id = 'u:' || u.id WHERE s.id = ?", args: [id] },
+      ]);
+      return { submission: (await toSubmissionDTOs(db, res[1]!))[0]!, result };
+    },
+
     /** Validates every row; unless dryRun, inserts the rows that are new. */
     async importPrompts(rows: unknown, defaults: ImportDefaults, dryRun: boolean, addedBy: string): Promise<ImportResult> {
       if (!Array.isArray(rows)) throw new HttpError(400, "`prompts` must be an array of prompt objects.");
@@ -159,6 +184,7 @@ export function createPromptAdmin(db: Db) {
         const dupe = existingText.get(text);
         if (dupe) {
           result.status = "duplicate";
+          result.existingId = dupe.id;
           result.errors = [`Already in the vault as #${dupe.id} “${dupe.title}” (${dupe.collection}).`];
         } else if (seenInFile.has(text)) {
           result.status = "duplicate";
@@ -233,6 +259,7 @@ export function createPromptAdmin(db: Db) {
       return { deleted: true };
     },
   };
+  return admin;
 }
 
 export type PromptAdmin = ReturnType<typeof createPromptAdmin>;

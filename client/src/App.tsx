@@ -3,6 +3,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { api, type CollectionInfo, type PromptDTO, type SubmissionStatus } from "./api";
 import { AccountMenu, useAuth } from "./auth";
 import { AdminView, STATUS_LABEL, usePendingCounts } from "./admin";
+import { InstallExtensionButton } from "./extension";
 
 const ALL = "All";
 const PAGE_SIZES = [10, 20, 40, 60] as const;
@@ -354,7 +355,7 @@ function Filters({ collections, collection, category, onCollection, onCategory }
 }
 
 // ---------- secondary views -------------------------------------------------------
-function SubmitView({ collections }: { collections: CollectionInfo[] }) {
+function SubmitView({ collections, onOpenPrompt }: { collections: CollectionInfo[]; onOpenPrompt: (id: number, title: string) => void }) {
   const qc = useQueryClient();
   const { user, signIn } = useAuth();
   const [url, setUrl] = useState("");
@@ -381,11 +382,12 @@ function SubmitView({ collections }: { collections: CollectionInfo[] }) {
         <h2 className="font-display text-lg font-bold mt-1">Analyze a post with the browser extension</h2>
         <p className="text-sm text-[var(--dim)] mt-1.5">Finds the prompt in an Instagram reel or post, or a LinkedIn post, straight from the page. If someone analysed it before, you get the result instantly.</p>
         <ol className="steps mt-4">
-          <li><span>Open the reel or post on desktop Chrome.</span></li>
-          <li><span>Click the PromptVault icon in the toolbar.</span></li>
+          <li><span>Install the extension in Chrome, Edge or Brave on a computer (takes a minute).</span></li>
+          <li><span>Open the reel or post and click the PromptVault icon in the toolbar.</span></li>
           <li><span>Press <b>Analyze this post</b>. Nothing is read until you do.</span></li>
         </ol>
-        <p className="text-xs text-[var(--dim)] mt-4 pt-4 border-t border-[var(--border)]">Chrome Web Store listing and mobile app: coming soon.</p>
+        <InstallExtensionButton className="btn btn-primary w-full mt-4" />
+        <p className="text-xs text-[var(--dim)] mt-4 pt-4 border-t border-[var(--border)]">One-click Chrome Web Store install and the mobile app: coming soon.</p>
       </section>
 
       <section className="panel">
@@ -436,9 +438,19 @@ function SubmitView({ collections }: { collections: CollectionInfo[] }) {
             <p className="section-label mb-2">Your submissions</p>
             <ul className="divide-y divide-[var(--border)] text-[13px]">
               {subs.data.submissions.map((s) => (
-                <li key={s.id} className="flex justify-between gap-3 py-2 min-w-0">
-                  <span className="truncate font-prompt text-xs min-w-0 text-[var(--dim)]">{s.url}</span>
-                  <span className={`shrink-0 status status-${s.status}`}>{STATUS_LABEL[s.status as SubmissionStatus] ?? s.status}</span>
+                <li key={s.id} className="py-2 min-w-0">
+                  <div className="flex justify-between gap-3 min-w-0">
+                    <span className="truncate font-prompt text-xs min-w-0 text-[var(--dim)]">{s.url}</span>
+                    <span className={`shrink-0 status status-${s.status}`}>{STATUS_LABEL[s.status as SubmissionStatus] ?? s.status}</span>
+                  </div>
+                  {s.prompts.length > 0 && (
+                    <p className="text-xs mt-1">
+                      Now in the vault:{" "}
+                      {s.prompts.map((p, i) => (
+                        <span key={p.id}>{i > 0 && ", "}<button type="button" className="link" onClick={() => onOpenPrompt(p.id, p.title)}>{p.title}</button></span>
+                      ))}
+                    </p>
+                  )}
                 </li>
               ))}
             </ul>
@@ -547,6 +559,8 @@ export function App() {
     try { localStorage.setItem(SIZE_KEY, String(n)); } catch { /* private mode */ }
   };
   const switchView = (v: View) => { setView(v); setPage(1); setSelectedId(null); window.scrollTo({ top: 0 }); };
+  /** Opens a prompt by searching its title (so it's on the first page) and selecting it. */
+  const openPrompt = (id: number, title: string) => { switchView("browse"); setCollection(ALL); setCategory(ALL); search(title); setSelectedId(id); };
 
   // Keyboard: "/" search, j/k or arrows move through the list, Esc closes the detail.
   const move = useCallback((d: 1 | -1) => {
@@ -604,7 +618,10 @@ export function App() {
               />
               <kbd className="kbd hidden sm:inline">/</kbd>
             </form>
-            <div className="ml-auto"><AccountMenu onOpenAdmin={() => switchView("admin")} /></div>
+            <div className="ml-auto flex items-center gap-2">
+              <InstallExtensionButton className="btn btn-secondary hidden md:inline-flex" />
+              <AccountMenu onOpenAdmin={() => switchView("admin")} />
+            </div>
           </div>
           <nav aria-label="Sections" className="tabs">
             {VIEWS.filter((v) => !v.admin || user?.role === "admin").map((v) => (
@@ -619,7 +636,7 @@ export function App() {
       </header>
 
       <main className="mx-auto max-w-[1440px] px-4 lg:px-6 py-6">
-        {view === "submit" && <SubmitView collections={collections} />}
+        {view === "submit" && <SubmitView collections={collections} onOpenPrompt={openPrompt} />}
         {view === "ranking" && <RankingView />}
         {view === "admin" && (user?.role === "admin" ? <AdminView /> : ready && (
           <div className="empty max-w-xl">

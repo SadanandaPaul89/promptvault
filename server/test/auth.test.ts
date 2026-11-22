@@ -191,10 +191,10 @@ test("admin: role from ADMIN_EMAILS; users get 403, anonymous 401; admins see ev
   assert.equal(kim.url, "https://www.instagram.com/reel/KimReel01/");
   assert.ok(list.body.counts.pending >= 1);
 
-  const upd = await boss.call<{ status: string }>(`/api/admin/submissions/${kim.id}`, { body: { status: "added" } });
-  assert.equal(upd.body.status, "added");
-  assert.equal((await user.call(`/api/admin/submissions/${kim.id}`, { body: { status: "rejected" } })).status, 403);
-  assert.equal((await user.call<{ submissions: { status: string }[] }>("/api/submissions")).body.submissions[0]!.status, "added");
+  const upd = await boss.call<{ status: string }>(`/api/admin/submissions/${kim.id}`, { body: { status: "rejected" } });
+  assert.equal(upd.body.status, "rejected");
+  assert.equal((await user.call(`/api/admin/submissions/${kim.id}`, { body: { status: "pending" } })).status, 403);
+  assert.equal((await user.call<{ submissions: { status: string }[] }>("/api/submissions")).body.submissions[0]!.status, "rejected");
 
   // Scripts can still use the ADMIN_TOKEN bearer; a wrong token is refused.
   assert.equal((await new Client(srv.base).call("/api/admin/submissions", { headers: { Authorization: `Bearer ${ADMIN_TOKEN}` } })).status, 200);

@@ -6,6 +6,9 @@
 3. Open `chrome://extensions`, turn on Developer mode, click **Load unpacked**, and select this folder.
 4. Open an Instagram post or reel, or a LinkedIn post. Click the PromptVault toolbar icon, then click **Analyze this post**.
 
+## How users install it (until it's on the Chrome Web Store)
+`npm run build` / `build:vercel` runs `scripts/build-extension.mjs`, which packages this folder as `dist/promptvault-extension.zip` with the deployed API origin swapped into `config.js` and the manifest (`EXTENSION_API_BASE`, or `https://$VERCEL_PROJECT_PRODUCTION_URL` on Vercel). The site's **Install extension** button links to that zip and walks users through **Load unpacked**. Run `npm run ext:zip` to build just the zip.
+
 ## Files
 | File | Role |
 |---|---|
@@ -15,7 +18,7 @@
 | `config.js` | API origin. Change it together with the `localhost` host permission in `manifest.json` |
 
 ## Before publishing
-- Point `config.js` and `manifest.json` at the production API.
+- Upload the zip that `npm run ext:zip` builds (with `EXTENSION_API_BASE` set). It already points at the production API.
 - Add icons (`icons` in the manifest).
 - Write a privacy policy that says media is processed and discarded, and only extracted text and the post link are stored.
 

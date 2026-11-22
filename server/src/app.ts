@@ -40,6 +40,7 @@ const MIME: Record<string, string> = {
   ".woff2": "font/woff2",
   ".txt": "text/plain; charset=utf-8",
   ".webmanifest": "application/manifest+json",
+  ".zip": "application/zip",
 };
 
 const SECURITY_HEADERS: Record<string, string> = {
@@ -376,12 +377,23 @@ export function createApp({ service, auth, analyzer, promptAdmin, adminToken, st
       if (status !== "all" && !SUBMISSION_STATUSES.has(status)) throw new HttpError(400, "Unknown status");
       return send(res, 200, await service.adminSubmissions(status, int(url.searchParams.get("limit"), 50, 1, 200), int(url.searchParams.get("offset"), 0, 0, 1_000_000)));
     }
+    // Approve = add the prompt(s) from that post to the vault and link them to the submission.
+    const sa = path.match(/^\/api\/admin\/submissions\/(\d{1,9})\/approve$/);
+    if (promptAdmin && sa && method === "POST") {
+      const who = await requireAdmin(req);
+      const body = await readJson(req, 256 * 1024); // up to 10 prompts of 8,000 chars
+      const d = (body.defaults ?? {}) as Record<string, unknown>;
+      const defaults = { collection: str(d.collection, 60), category: str(d.category, 60), tool: str(d.tool, 40) };
+      if (Array.isArray(body.prompts) && body.prompts.length > 10) throw new HttpError(400, "Add at most 10 prompts per link.");
+      return send(res, 200, await promptAdmin.approveSubmission(Number(sa[1]), body.prompts, defaults, who));
+    }
     const sm = path.match(/^\/api\/admin\/submissions\/(\d{1,9})$/);
     if (sm && method === "POST") {
       await requireAdmin(req);
       const body = await readJson(req);
-      if (typeof body.status !== "string" || !SUBMISSION_STATUSES.has(body.status as SubmissionStatus)) throw new HttpError(400, "status must be pending, added or rejected");
-      return send(res, 200, await service.setSubmissionStatus(Number(sm[1]), body.status as SubmissionStatus));
+      if (body.status === "added") throw new HttpError(400, "Approve with POST /api/admin/submissions/:id/approve and the prompt(s) from the post.");
+      if (body.status !== "pending" && body.status !== "rejected") throw new HttpError(400, "status must be pending or rejected");
+      return send(res, 200, await service.setSubmissionStatus(Number(sm[1]), body.status));
     }
 
     // --- admin: add / import / delete prompts --------------------------------------

@@ -117,3 +117,46 @@ test("recently added list, and delete removes the prompt with its saves; built-i
   assert.equal((await admin.call(`/api/admin/prompts/${seed.id}`, { method: "DELETE" })).status, 409);
   assert.equal((await admin.call(`/api/admin/prompts/999999`, { method: "DELETE" })).status, 404);
 });
+
+test("approving a submitted link adds its prompt to the vault and shows it to the submitter", async () => {
+  type Sub = { id: number; status: string; prompts: { id: number; title: string }[] };
+  const sub = await user.call<{ id: number }>("/api/submissions", { body: { url: "https://www.instagram.com/reel/ApproveMe01/", note: "logo idea", category: "Other" } });
+  const id = sub.body.id;
+  const approve = (body: unknown, c: Client = admin) => c.call<{ submission: Sub; result: ImportResult; error?: string }>(`/api/admin/submissions/${id}/approve`, { body });
+  const prompt = { title: "Minimal logo concept", masterPrompt: "Design a minimal logo for [BRAND] using [COLOR] and one simple shape.", collection: "Design Kit", category: "Logos" };
+
+  // A plain status flip can't approve any more: an approval must add prompts.
+  assert.equal((await admin.call(`/api/admin/submissions/${id}`, { body: { status: "added" } })).status, 400);
+  assert.equal((await approve({ prompts: [prompt] }, user)).status, 403);
+  assert.equal((await approve({ prompts: [] })).status, 400);
+
+  // Any invalid prompt → nothing written, still pending.
+  const before = (await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM prompts"))!.n;
+  const bad = await approve({ prompts: [prompt, { title: "", masterPrompt: "x" }] });
+  assert.equal(bad.status, 400);
+  assert.match(bad.body.error!, /Prompt 2/);
+  assert.equal((await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM prompts"))!.n, before);
+
+  const ok = await approve({ prompts: [prompt] });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.submission.status, "added");
+  assert.equal(ok.body.submission.prompts[0]!.title, "Minimal logo concept");
+  const newId = ok.body.submission.prompts[0]!.id;
+  const vault = await user.call<VaultResponse>("/api/vault?collection=Design%20Kit&limit=50");
+  assert.ok(vault.body.prompts.some((p) => p.id === newId));
+
+  const mine = await user.call<{ submissions: (Sub & { submittedBy?: unknown })[] }>("/api/submissions");
+  const s = mine.body.submissions.find((x) => x.id === id)!;
+  assert.deepEqual(s.prompts, [{ id: newId, title: "Minimal logo concept" }]);
+  assert.equal("submittedBy" in s, false);
+
+  assert.equal((await approve({ prompts: [prompt] })).status, 409);
+
+  // Undo unlinks (the prompt stays in the vault); approving again with the same
+  // text links the existing prompt instead of adding a copy.
+  await admin.call(`/api/admin/submissions/${id}`, { body: { status: "pending" } });
+  const again = await approve({ prompts: [prompt] });
+  assert.equal(again.status, 200);
+  assert.equal(again.body.result.rows[0]!.status, "duplicate");
+  assert.deepEqual(again.body.submission.prompts.map((p) => p.id), [newId]);
+});
