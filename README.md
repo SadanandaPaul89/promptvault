@@ -27,32 +27,36 @@ Other scripts: `npm test` (API and ranking tests) and `npm run typecheck`.
 
 ## Deploy
 
-### Free: Vercel (website) + Render (API) + Turso (database)
+### Free: Vercel (website + API) + Turso (database)
 
-All three have free plans and none needs a card.
+Both have free plans and neither needs a card.
 
-- **Vercel** serves the website and forwards every `/api/*` request to Render ([vercel.json](vercel.json)), so the browser only ever talks to one origin and the login cookies stay first-party.
-- **Render** runs the API on its free plan ([render.yaml](render.yaml)). Free instances have no persistent disk, so the data lives in Turso.
-- **Turso** holds the database. The free tier is 5 GB, far more than this app needs.
+- **Vercel** serves the website and runs the API as one serverless function on the same domain, so login cookies are first-party and there's no cross-site setup. `npm run build:vercel` ([scripts/build-vercel.mjs](scripts/build-vercel.mjs)) builds the client and bundles [server/src/vercel.ts](server/src/vercel.ts) into Vercel's [Build Output](https://vercel.com/docs/build-output-api/v3) format.
+- **Turso** holds the database, because serverless functions have no lasting disk. The free tier is 5 GB, far more than this app needs.
 
-1. **Turso:** sign up at [turso.tech](https://turso.tech) and install the CLI, or use the dashboard. Create the database in the region nearest your Render region (Singapore → `aws-ap-south-1` Mumbai or the closest listed):
+1. **Turso:** create a database and copy its URL and a token:
    ```bash
    turso db create promptvault
    turso db show promptvault --url       # → TURSO_DATABASE_URL
    turso db tokens create promptvault    # → TURSO_AUTH_TOKEN
    ```
-   The server creates the tables and loads the 524 prompts on its first start.
-2. **Render:** Dashboard → **New → Blueprint** → choose this repo. It creates `promptvault-api` on the free plan and generates `JWT_SECRET`. When asked, enter `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `ADMIN_EMAILS` (your email) and `ALLOWED_ORIGINS` (your Vercel URL, e.g. `https://promptvault.vercel.app`; you can fill it in after step 3). Then check `https://promptvault-api.onrender.com/api/health`.
-3. **Vercel:** **Add New → Project** → import this repo and keep the defaults. If Render gave the service a different URL than `promptvault-api.onrender.com`, change the `/api` rewrite in `vercel.json` first.
-4. Open the Vercel URL and create an account with your `ADMIN_EMAILS` address. The Admin tab appears.
+   The tables and the 524 prompts are created on the first request.
+2. **Vercel:** **Add New → Project** → import this repo. Keep the defaults ([vercel.json](vercel.json) sets the build). Under **Environment Variables** add:
+   - `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` from step 1.
+   - `JWT_SECRET`: 32+ random characters. Generate one with `node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"`.
+   - `ADMIN_EMAILS`: your email (comma-separate several).
 
-Every push to `main` redeploys Render and Vercel.
+   Then **Deploy**.
+3. **Region:** in the Vercel project, open **Settings → Functions → Function Region** and pick the region closest to your Turso database (for example Mumbai `bom1` for Turso's `aws-ap-south-1`), then redeploy. Every API request talks to the database, so this matters more than anything else for speed.
+4. Open the site, create an account with your `ADMIN_EMAILS` address, and the Admin tab appears.
+
+Every push to `main` redeploys. If the site shows "Server is misconfigured", an environment variable is missing; the function log in Vercel says which.
 
 **Notes:**
-- **Sleeping:** Render's free plan stops the API after 15 minutes without traffic, and the next visit waits about a minute. [keep-awake.yml](.github/workflows/keep-awake.yml) pings it every 10 minutes from GitHub Actions to prevent that (free for public repos; one always-on service fits in Render's 750 free hours a month). If Render's URL differs, set the repo variable `RENDER_URL`. GitHub pauses scheduled workflows after 60 days without commits; re-enable it from the Actions tab.
-- **Speed:** each API request goes Render → Turso over the network, so keep both in nearby regions. The prompt catalog is cached in the server's memory, so browsing costs one small query per request.
-- **Reels:** whisper.cpp isn't installed on Render, so the extension's analyses use the caption and on-screen text only.
-- **Extension:** set `API_BASE` in [extension/config.js](extension/config.js) and the matching `host_permissions` entry in `manifest.json` to the Render URL. It calls Render directly because Vercel limits proxied request bodies, and reel audio can be several MB.
+- **Cold starts:** a function that hasn't run for a while takes a second or two to start. The prompt catalog is then cached in memory, so browsing costs one small query per request.
+- **Rate limits** are kept in each function instance's memory, so they're looser than on a single server.
+- **Reels:** whisper.cpp can't run on Vercel, so the extension's analyses use the caption and on-screen text only.
+- **Extension:** set `API_BASE` in [extension/config.js](extension/config.js) and the matching `host_permissions` entry in `manifest.json` to your Vercel URL.
 
 ### Other hosts
 
@@ -66,7 +70,7 @@ Environment variables are listed in `.env.example`. The health check is `GET /ap
 
 ## Adding prompts
 
-Drop a JSON file into `server/seed/` in the same shape as `pm-library-seed.json` and register it in `SEED_FILES` in [server/src/db.ts](server/src/db.ts). Seeding runs on every boot and is idempotent: new prompts are added, and existing ones (with their real votes and copies) are never overwritten.
+Drop a JSON file into `server/seed/` in the same shape as `pm-library-seed.json` and import it and add it to `SEED_COLLECTIONS` in [server/src/db.ts](server/src/db.ts). Seeding runs on every boot and is idempotent: new prompts are added, and existing ones (with their real votes and copies) are never overwritten.
 
 ## Ranking
 

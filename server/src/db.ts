@@ -1,15 +1,15 @@
-import { createClient, type Client, type InArgs, type InStatement, type ResultSet, type Transaction } from "@libsql/client";
+import type { Client, Config, InArgs, InStatement, ResultSet, Transaction } from "@libsql/client";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+// Imported (not read from disk) so they're bundled into the serverless function.
+import viralPrompts from "../seed/viral-prompts.json" with { type: "json" };
+import pmLibrary from "../seed/pm-library-seed.json" with { type: "json" };
 
-const SEED_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "seed");
-
-/** Seed files → collection name. Add a file here to ship a new collection. */
-export const SEED_FILES: { file: string; collection: string }[] = [
-  { file: "viral-prompts.json", collection: "Viral Creator Prompts" },
-  { file: "pm-library-seed.json", collection: "Product Management" },
+/** Seed data → collection name. Import a new JSON file and add it here to ship a new collection. */
+export const SEED_COLLECTIONS: { collection: string; prompts: SeedPrompt[] }[] = [
+  { collection: "Viral Creator Prompts", prompts: viralPrompts as SeedPrompt[] },
+  { collection: "Product Management", prompts: pmLibrary as SeedPrompt[] },
 ];
 
 export type SeedPrompt = {
@@ -252,12 +252,27 @@ export async function openDatabase(config: DbConfig | ":memory:"): Promise<Db> {
   const cfg: DbConfig = config === ":memory:" ? { url: ":memory:" } : config;
   const local = cfg.url.startsWith("file:");
   if (local) mkdirSync(dirname(cfg.url.slice("file:".length)), { recursive: true });
-  const client = createClient(cfg);
+  const client = await connect(cfg);
   if (local) await client.executeMultiple("PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;");
   const db = wrap(client);
   await migrate(db);
   await seed(db);
   return db;
+}
+
+/**
+ * Local files and :memory: use the full client (native SQLite). Remote databases
+ * use the pure-JS HTTP client: no native binaries, and stateless HTTP suits
+ * serverless functions.
+ */
+async function connect(cfg: DbConfig): Promise<Client> {
+  if (cfg.url === ":memory:" || cfg.url.startsWith("file:")) {
+    const { createClient } = await import("@libsql/client");
+    return createClient(cfg);
+  }
+  const { createClient } = await import("@libsql/client/web");
+  const url = cfg.url.replace(/^libsql:\/\//, "https://");
+  return createClient({ url, authToken: cfg.authToken } satisfies Config);
 }
 
 const split = (sql: string): Stmt[] => sql.split(";").map((s) => s.trim()).filter(Boolean).map((sql) => ({ sql }));
@@ -290,15 +305,14 @@ function seedKey(collection: string, s: SeedPrompt): string {
  * last run, so a cold start costs one query instead of hundreds of writes.
  */
 export async function seed(db: Db): Promise<number> {
-  const files = SEED_FILES.map(({ file, collection }) => ({ collection, raw: readFileSync(join(SEED_DIR, file), "utf8") }));
-  const hash = createHash("sha256").update(files.map((f) => `${f.collection}\n${f.raw}`).join("\n")).digest("hex");
+  const hash = createHash("sha256").update(JSON.stringify(SEED_COLLECTIONS)).digest("hex");
   const done = await db.get<{ value: string }>("SELECT value FROM meta WHERE key = 'seed_hash'");
   if (done?.value === hash) return 0;
 
   const now = Date.now();
   const stmts: Stmt[] = [];
-  for (const { collection, raw } of files) {
-    for (const s of JSON.parse(raw) as SeedPrompt[]) {
+  for (const { collection, prompts } of SEED_COLLECTIONS) {
+    for (const s of prompts) {
       stmts.push({
         sql: `INSERT OR IGNORE INTO prompts
                 (seed_key, title, master_prompt, collection, category, section, tool, use_cases, variables,
