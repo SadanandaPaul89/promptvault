@@ -280,7 +280,8 @@ export function createAuth(db: Db, opts: AuthOptions) {
       );
       if (!row || row.user_id !== Number(c.sub)) throw new AuthError(401, "invalid_token", "Invalid token");
       if (!row.live) throw new AuthError(401, "session_revoked", "Session ended. Sign in again.");
-      return toDTO(row);
+      // ADMIN_EMAILS applies immediately, even to accounts and sessions created before it was set.
+      return toDTO(admins.has(row.email) ? { ...row, role: "admin" } : row);
     },
   };
 }

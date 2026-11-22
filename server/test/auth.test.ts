@@ -209,3 +209,22 @@ test("role changes apply immediately, without waiting for the token to expire", 
   await db.run("UPDATE users SET role = 'user' WHERE id = ?", body.user.id);
   assert.equal((await c.call("/api/admin/submissions")).status, 403);
 });
+
+test("adding an email to ADMIN_EMAILS later makes an existing session admin without signing in again", async () => {
+  // Own server instance: the shared one has used up this IP's sign-up rate limit.
+  const before = await startServer(db);
+  const c = new Client(before.base);
+  const { body } = await c.register("late@example.com");
+  await before.close();
+  assert.equal(body.user.role, "user");
+  // Redeploy with the email added: same database and signing key, new admin list.
+  const redeployed = await startServer(db, { authOptions: { adminEmails: ["late@example.com"] } });
+  try {
+    const moved = new Client(redeployed.base);
+    for (const [k, v] of c.jar) moved.jar.set(k, v); // same browser cookies
+    assert.equal((await moved.call<{ user: UserDTO }>("/api/auth/me")).body.user.role, "admin");
+    assert.equal((await moved.call("/api/admin/submissions")).status, 200);
+  } finally {
+    await redeployed.close();
+  }
+});
