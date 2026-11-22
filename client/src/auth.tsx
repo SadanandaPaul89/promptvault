@@ -139,7 +139,7 @@ function AuthDialog({ reason, onClose, onAuthed }: { reason?: string; onClose: (
   );
 }
 
-export function AccountMenu() {
+export function AccountMenu({ onOpenAdmin }: { onOpenAdmin?: () => void }) {
   const { user, ready, signIn, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -168,6 +168,11 @@ export function AccountMenu() {
             <p className="text-sm font-medium truncate">{user.name || user.email}</p>
             <p className="text-xs text-[var(--dim)] truncate">{user.email}{user.role === "admin" && " · Admin"}</p>
           </div>
+          {user.role === "admin" && onOpenAdmin && (
+            <button type="button" role="menuitem" className="menu-item font-medium border-b border-[var(--border)]" onClick={() => { setOpen(false); onOpenAdmin(); }}>
+              Admin panel: approve submissions
+            </button>
+          )}
           <button type="button" role="menuitem" className="menu-item" onClick={() => { setOpen(false); void signOut(false); }}>Sign out</button>
           <button type="button" role="menuitem" className="menu-item" onClick={() => { setOpen(false); void signOut(true); }}>Sign out on all devices</button>
         </div>

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, type CollectionInfo, type PromptDTO } from "./api";
+import { api, type CollectionInfo, type PromptDTO, type SubmissionStatus } from "./api";
 import { AccountMenu, useAuth } from "./auth";
-import { AdminView } from "./admin";
+import { AdminView, STATUS_LABEL, usePendingCounts } from "./admin";
 
 const ALL = "All";
 const PAGE_SIZES = [10, 20, 40, 60] as const;
@@ -13,8 +13,8 @@ const VIEWS: { id: View; label: string; admin?: boolean }[] = [
   { id: "browse", label: "Browse" },
   { id: "saved", label: "Saved" },
   { id: "submit", label: "Submit" },
-  { id: "ranking", label: "How ranking works" },
   { id: "admin", label: "Admin", admin: true },
+  { id: "ranking", label: "How ranking works" },
 ];
 
 const QUICK: Record<string, string[]> = {
@@ -438,7 +438,7 @@ function SubmitView({ collections }: { collections: CollectionInfo[] }) {
               {subs.data.submissions.map((s) => (
                 <li key={s.id} className="flex justify-between gap-3 py-2 min-w-0">
                   <span className="truncate font-prompt text-xs min-w-0 text-[var(--dim)]">{s.url}</span>
-                  <span className="shrink-0 capitalize">{s.status}</span>
+                  <span className={`shrink-0 status status-${s.status}`}>{STATUS_LABEL[s.status as SubmissionStatus] ?? s.status}</span>
                 </li>
               ))}
             </ul>
@@ -492,6 +492,7 @@ function RankingView() {
 // ---------- page ------------------------------------------------------------------
 export function App() {
   const { user, ready, signIn } = useAuth();
+  const pending = usePendingCounts(user?.role === "admin");
   const initial = useMemo(readUrl, []);
   const [view, setView] = useState<View>(initial.view);
   const [query, setQuery] = useState(initial.q);
@@ -603,12 +604,13 @@ export function App() {
               />
               <kbd className="kbd hidden sm:inline">/</kbd>
             </form>
-            <div className="ml-auto"><AccountMenu /></div>
+            <div className="ml-auto"><AccountMenu onOpenAdmin={() => switchView("admin")} /></div>
           </div>
           <nav aria-label="Sections" className="tabs">
             {VIEWS.filter((v) => !v.admin || user?.role === "admin").map((v) => (
-              <button key={v.id} type="button" onClick={() => switchView(v.id)} aria-current={view === v.id ? "page" : undefined} className="tab">
+              <button key={v.id} type="button" onClick={() => switchView(v.id)} aria-current={view === v.id ? "page" : undefined} className={v.admin ? "tab tab-admin" : "tab"}>
                 {v.label}
+                {v.admin && pending.total > 0 && <span className="tab-count" aria-label={`${pending.total} waiting for review`}>{pending.total}</span>}
                 {v.id === "saved" && data && data.stats.savedCount > 0 && <span className="tab-count">{data.stats.savedCount}</span>}
               </button>
             ))}

@@ -63,7 +63,7 @@
 /* ---------- header ---------- */
 .site-header { position: sticky; top: 0; z-index: 30; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
 .wordmark { font-family: "Archivo", system-ui, sans-serif; font-weight: 800; font-size: 17px; letter-spacing: -0.02em; white-space: nowrap; }
-.search { flex: 1; max-width: 560px; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); transition: border-color .15s; }
+.search { flex: 1; min-width: 0; max-width: 560px; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); transition: border-color .15s; }
 .search:focus-within { border-color: var(--border-strong); box-shadow: 0 0 0 3px var(--accent-soft); }
 .search input::-webkit-search-cancel-button { cursor: pointer; }
 .kbd { font: 500 11px/1 "JetBrains Mono", ui-monospace, monospace; padding: 3px 6px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; color: var(--dim); background: var(--surface); }
@@ -133,6 +133,11 @@
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: 8px; font-size: 14px; font-weight: 500; border: 1px solid transparent; transition: background .15s, border-color .15s; white-space: nowrap; }
 .btn:disabled { opacity: .45; cursor: default; }
 .btn-primary { background: var(--text); color: var(--bg); }
+.btn-sm { height: 30px; padding: 0 11px; font-size: 13px; border-radius: 7px; }
+.status { font-size: 12px; font-weight: 500; padding: 2px 8px; border-radius: 999px; background: var(--surface2); color: var(--dim); }
+.status-added { color: var(--ok); }
+.status-rejected { color: var(--danger); }
+.tab-admin { color: var(--text); font-weight: 500; }
 .btn-primary:hover:not(:disabled) { opacity: .9; }
 .btn-secondary { background: var(--surface); border-color: var(--border); }
 .btn-secondary:hover:not(:disabled) { border-color: var(--border-strong); }
