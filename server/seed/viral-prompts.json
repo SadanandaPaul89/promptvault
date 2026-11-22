@@ -1,0 +1,563 @@
+[
+ {
+  "title": "Cinematic Portrait from a Selfie",
+  "masterPrompt": "Transform the uploaded [PHOTO] into a cinematic portrait. Keep the face 100% identical — same skin tone, features and expression. Change outfit to [OUTFIT], background to [BACKGROUND], mood: [MOOD]. Shot on 85mm lens, shallow depth of field, golden-hour light, ultra-detailed skin texture, 4K. No cartoon, no face change.",
+  "category": "AI Photo",
+  "section": "AI Photo",
+  "tool": "Nano Banana",
+  "useCases": [
+   "portrait",
+   "selfie to cinematic photo",
+   "profile picture",
+   "dp",
+   "photo editing"
+  ],
+  "variables": [
+   "PHOTO",
+   "MOOD",
+   "OUTFIT",
+   "BACKGROUND"
+  ],
+  "viralScore": 96,
+  "copyCount": 18420,
+  "workedVotes": 412,
+  "totalVotes": 468,
+  "daysAgo": 2
+ },
+ {
+  "title": "Restore Old / Damaged Family Photo",
+  "masterPrompt": "Restore this [OLD_PHOTO] from around [YEAR]. Remove scratches, tears, folds and stains. Reconstruct missing areas naturally, colourise realistically with true skin tones, sharpen faces without changing identity. Keep clothing and background authentic to the era. Output high-resolution, print-ready.",
+  "category": "AI Photo",
+  "section": "AI Photo",
+  "tool": "Gemini",
+  "useCases": [
+   "old photo restore",
+   "family photo",
+   "damaged photo fix",
+   "black and white to colour"
+  ],
+  "variables": [
+   "OLD_PHOTO",
+   "YEAR"
+  ],
+  "viralScore": 91,
+  "copyCount": 15230,
+  "workedVotes": 389,
+  "totalVotes": 421,
+  "daysAgo": 4
+ },
+ {
+  "title": "3D Action Figure / Collectible Toy of Yourself",
+  "masterPrompt": "Create a 1/7 scale 3D action figure of the person in [PHOTO], in premium collectible packaging. Name on box: [NAME]. Include accessories: [ACCESSORIES]. Figure wears the same outfit as the photo, realistic PVC toy texture, studio lighting, box art in background, ultra detailed.",
+  "category": "AI Photo",
+  "section": "AI Photo",
+  "tool": "ChatGPT Image",
+  "useCases": [
+   "3d figurine",
+   "action figure",
+   "toy trend",
+   "collectible",
+   "fun gift photo"
+  ],
+  "variables": [
+   "PHOTO",
+   "NAME",
+   "ACCESSORIES"
+  ],
+  "viralScore": 94,
+  "copyCount": 22100,
+  "workedVotes": 356,
+  "totalVotes": 445,
+  "daysAgo": 3
+ },
+ {
+  "title": "8-Second Product Ad — Veo 3",
+  "masterPrompt": "Cinematic 8-second product ad: [PRODUCT] on [SETTING], camera slowly orbits 180°, light sweeps across the surface, water droplets / steam for freshness. A confident voice says: '[VOICE_LINE]'. End with product centred, logo space on top. Photorealistic, 24fps, no text distortion.",
+  "category": "AI Video",
+  "section": "AI Video",
+  "tool": "Veo 3",
+  "useCases": [
+   "product ad video",
+   "veo 3 video",
+   "shop advertisement",
+   "brand video",
+   "selling video"
+  ],
+  "variables": [
+   "PRODUCT",
+   "SETTING",
+   "VOICE_LINE"
+  ],
+  "viralScore": 95,
+  "copyCount": 19800,
+  "workedVotes": 401,
+  "totalVotes": 462,
+  "daysAgo": 1
+ },
+ {
+  "title": "Make Any Photo Talk & Sing",
+  "masterPrompt": "Animate the person in [PHOTO] to speak this script with natural lip-sync: '[SCRIPT]'. Emotion: [EMOTION]. Keep head movement subtle, eyes blinking naturally, background static, face identity unchanged. Duration 10 seconds, vertical 9:16.",
+  "category": "AI Video",
+  "section": "AI Video",
+  "tool": "Kling",
+  "useCases": [
+   "talking photo",
+   "lip sync video",
+   "photo speaks",
+   "birthday wish video"
+  ],
+  "variables": [
+   "PHOTO",
+   "SCRIPT",
+   "EMOTION"
+  ],
+  "viralScore": 88,
+  "copyCount": 12400,
+  "workedVotes": 298,
+  "totalVotes": 361,
+  "daysAgo": 5
+ },
+ {
+  "title": "Before / After Transformation Reel",
+  "masterPrompt": "Seamless transformation video of [SUBJECT]: starts as [BEFORE], camera pushes in, a light flash / whip-pan transition at second 3, reveals [AFTER] — same angle, same framing. Satisfying, high-energy, vertical 9:16, photorealistic throughout.",
+  "category": "AI Video",
+  "section": "AI Video",
+  "tool": "Veo 3",
+  "useCases": [
+   "transformation video",
+   "before after",
+   "makeover reel",
+   "room renovation video",
+   "weight loss reel"
+  ],
+  "variables": [
+   "BEFORE",
+   "AFTER",
+   "SUBJECT"
+  ],
+  "viralScore": 90,
+  "copyCount": 14750,
+  "workedVotes": 342,
+  "totalVotes": 398,
+  "daysAgo": 3
+ },
+ {
+  "title": "30-Second Hook Script That Stops the Scroll",
+  "masterPrompt": "Write a 30-second Reel script on [TOPIC] for [AUDIENCE], tone: [TONE]. Give me: (1) 5 hook lines under 7 words for the first 2 seconds, (2) spoken script with [ON-SCREEN TEXT] and [B-ROLL] cues per line, (3) a loop ending that replays into the hook, (4) caption + 5 hashtags. Hinglish where it sounds natural.",
+  "category": "Reels Script",
+  "section": "Reels Script",
+  "tool": "ChatGPT",
+  "useCases": [
+   "reel script",
+   "hook",
+   "viral reel",
+   "content script",
+   "instagram growth"
+  ],
+  "variables": [
+   "TOPIC",
+   "AUDIENCE",
+   "TONE"
+  ],
+  "viralScore": 89,
+  "copyCount": 16900,
+  "workedVotes": 377,
+  "totalVotes": 430,
+  "daysAgo": 2
+ },
+ {
+  "title": "Hinglish Storytime Reel — Full Script",
+  "masterPrompt": "Turn this topic into a 45-second Hinglish storytime script: [STORY_TOPIC]. Start mid-action, no intro. Build tension every 8 seconds, end with this twist: [TWIST]. Write exactly how a 22-year-old in Delhi/Mumbai actually talks — mix Hindi-English naturally. Add pause markers (…) where I should breathe.",
+  "category": "Reels Script",
+  "section": "Reels Script",
+  "tool": "Claude",
+  "useCases": [
+   "storytime",
+   "hinglish script",
+   "story reel",
+   "narrative video"
+  ],
+  "variables": [
+   "STORY_TOPIC",
+   "TWIST"
+  ],
+  "viralScore": 82,
+  "copyCount": 9200,
+  "workedVotes": 244,
+  "totalVotes": 302,
+  "daysAgo": 7
+ },
+ {
+  "title": "7 Reels from 1 Idea — Content Calendar",
+  "masterPrompt": "I create content in [NICHE] and want to promote [PRODUCT_OR_SKILL]. Give me 7 Reel ideas for 7 days: for each — hook line, 20-second script outline, trending audio type to search, best posting time (IST), and CTA. Mix: 2 educational, 2 entertaining, 1 story, 1 proof/testimonial style, 1 direct offer. No repeats.",
+  "category": "Reels Script",
+  "section": "Reels Script",
+  "tool": "ChatGPT",
+  "useCases": [
+   "content calendar",
+   "7 day plan",
+   "creator ideas",
+   "niche content",
+   "posting plan"
+  ],
+  "variables": [
+   "NICHE",
+   "PRODUCT_OR_SKILL"
+  ],
+  "viralScore": 84,
+  "copyCount": 10800,
+  "workedVotes": 271,
+  "totalVotes": 318,
+  "daysAgo": 6
+ },
+ {
+  "title": "Diwali Product Photo for Your Shop",
+  "masterPrompt": "Professional product photo of [PRODUCT] for a [SHOP_TYPE]. Festive Diwali setting: warm fairy lights bokeh, marigold flowers, brass diyas at the side, rich warm tones. Product is hero — sharp, centred, true colours. Leave clean space at top for text. Add subtle text area: '[OFFER]'. Studio-quality, ready to post on Instagram & WhatsApp status.",
+  "category": "Business",
+  "section": "Business",
+  "tool": "Nano Banana",
+  "useCases": [
+   "diwali product photo",
+   "saree shop",
+   "shop photo",
+   "product photo for business",
+   "festival sale",
+   "small business marketing"
+  ],
+  "variables": [
+   "PRODUCT",
+   "SHOP_TYPE",
+   "OFFER"
+  ],
+  "viralScore": 97,
+  "copyCount": 24300,
+  "workedVotes": 488,
+  "totalVotes": 521,
+  "daysAgo": 1
+ },
+ {
+  "title": "Caption + Hashtags That Actually Sell",
+  "masterPrompt": "Write an Instagram caption to sell [PRODUCT] at [PRICE] in [CITY]. Line 1 = hook with the result, not the product. Then 3 short benefit lines, social proof placeholder, clear CTA: 'DM ORDER or WhatsApp'. End with 12 hashtags: 4 big, 4 medium, 4 hyper-local to [CITY]. Also give a Hinglish version.",
+  "category": "Business",
+  "section": "Business",
+  "tool": "ChatGPT",
+  "useCases": [
+   "instagram caption",
+   "sell on instagram",
+   "small business",
+   "hashtags",
+   "shop marketing"
+  ],
+  "variables": [
+   "PRODUCT",
+   "PRICE",
+   "CITY"
+  ],
+  "viralScore": 85,
+  "copyCount": 13600,
+  "workedVotes": 312,
+  "totalVotes": 371,
+  "daysAgo": 4
+ },
+ {
+  "title": "WhatsApp Broadcast Offer Message",
+  "masterPrompt": "Write a WhatsApp broadcast for [SHOP_NAME]: offer is [OFFER], valid till [DEADLINE]. Under 60 words, friendly not spammy, starts with customer's benefit, one emoji max per line, ends with a reply keyword ('Reply YES to book'). Give 3 variants: formal, friendly, Hinglish.",
+  "category": "Business",
+  "section": "Business",
+  "tool": "ChatGPT",
+  "useCases": [
+   "whatsapp marketing",
+   "offer message",
+   "broadcast",
+   "sale announcement",
+   "customers"
+  ],
+  "variables": [
+   "OFFER",
+   "DEADLINE",
+   "SHOP_NAME"
+  ],
+  "viralScore": 81,
+  "copyCount": 8900,
+  "workedVotes": 229,
+  "totalVotes": 276,
+  "daysAgo": 8
+ },
+ {
+  "title": "Feynman Exam Crammer — Learn Anything Fast",
+  "masterPrompt": "Teach me [TOPIC] for [EXAM] — I have [HOURS_LEFT] hours. Use Feynman method: explain like I'm 12, then add exam-level depth, then quiz me with 5 questions one by one (wait for my answer). After each answer, tell me what's missing. Finish with a 10-line revision sheet + 3 most likely exam questions with model answers.",
+  "category": "Study",
+  "section": "Study",
+  "tool": "ChatGPT",
+  "useCases": [
+   "exam preparation",
+   "study fast",
+   "feynman",
+   "last minute study",
+   "learn topic"
+  ],
+  "variables": [
+   "TOPIC",
+   "EXAM",
+   "HOURS_LEFT"
+  ],
+  "viralScore": 93,
+  "copyCount": 20100,
+  "workedVotes": 445,
+  "totalVotes": 489,
+  "daysAgo": 2
+ },
+ {
+  "title": "Notes → Flashcards + Viva Quiz",
+  "masterPrompt": "Here are my notes: [NOTES]. Convert into: (1) 15 flashcards Q/A — short, one fact each, (2) 10 viva-style oral questions with 2-line answers, (3) a 'trap list' of 5 confusions students make in this topic. Order flashcards from easy → hard. Nothing outside my notes except marking traps.",
+  "category": "Study",
+  "section": "Study",
+  "tool": "Claude",
+  "useCases": [
+   "flashcards",
+   "notes revision",
+   "quiz me",
+   "active recall",
+   "study notes"
+  ],
+  "variables": [
+   "NOTES"
+  ],
+  "viralScore": 86,
+  "copyCount": 11400,
+  "workedVotes": 289,
+  "totalVotes": 334,
+  "daysAgo": 5
+ },
+ {
+  "title": "Viva / Interview Answer Builder",
+  "masterPrompt": "Act as a strict but fair viva examiner for [SUBJECT], topic [TOPIC]. Ask me one question at a time, starting basic → advanced. After my answer: score /10, give the ideal 3-line answer, and one follow-up the real examiner would ask. Do 10 rounds, then give my readiness report.",
+  "category": "Study",
+  "section": "Study",
+  "tool": "ChatGPT",
+  "useCases": [
+   "viva preparation",
+   "oral exam",
+   "interview answers",
+   "college viva"
+  ],
+  "variables": [
+   "SUBJECT",
+   "TOPIC"
+  ],
+  "viralScore": 83,
+  "copyCount": 9700,
+  "workedVotes": 251,
+  "totalVotes": 305,
+  "daysAgo": 6
+ },
+ {
+  "title": "Fix My Bug Like a Senior Dev",
+  "masterPrompt": "Language: [LANGUAGE]. My code: [CODE]. Error: [ERROR]. Don't just fix it — (1) explain the root cause in 2 lines, (2) give the corrected code with the changed lines marked, (3) tell me the concept I misunderstood, (4) give me a 5-minute practice task on that concept. No full rewrite unless necessary.",
+  "category": "Coding",
+  "section": "Coding",
+  "tool": "Claude",
+  "useCases": [
+   "debug code",
+   "fix bug",
+   "error help",
+   "programming help"
+  ],
+  "variables": [
+   "LANGUAGE",
+   "CODE",
+   "ERROR"
+  ],
+  "viralScore": 90,
+  "copyCount": 15800,
+  "workedVotes": 367,
+  "totalVotes": 412,
+  "daysAgo": 3
+ },
+ {
+  "title": "Landing Page in One Prompt",
+  "masterPrompt": "Build a complete single-file HTML landing page for [PRODUCT], audience: [AUDIENCE], style: [STYLE]. Include: hero with headline + CTA, 3 features, pricing, testimonial placeholders, FAQ, footer. Modern CSS, mobile-first, no external images (use CSS/SVG), smooth scroll. Give full working code, then list what to customise first.",
+  "category": "Coding",
+  "section": "Coding",
+  "tool": "ChatGPT",
+  "useCases": [
+   "build website",
+   "landing page",
+   "portfolio site",
+   "startup page",
+   "html css"
+  ],
+  "variables": [
+   "PRODUCT",
+   "AUDIENCE",
+   "STYLE"
+  ],
+  "viralScore": 87,
+  "copyCount": 12900,
+  "workedVotes": 303,
+  "totalVotes": 365,
+  "daysAgo": 4
+ },
+ {
+  "title": "Explain Code Like I'm a Beginner",
+  "masterPrompt": "Explain this [LANGUAGE] code to a complete beginner: [CODE]. Go block by block: what it does in plain English, a real-life analogy, then the technical term. End with: 3 'what happens if I change…' experiments I should try, and 2 questions to check I understood.",
+  "category": "Coding",
+  "section": "Coding",
+  "tool": "ChatGPT",
+  "useCases": [
+   "explain code",
+   "learn programming",
+   "beginner coding",
+   "understand code"
+  ],
+  "variables": [
+   "CODE",
+   "LANGUAGE"
+  ],
+  "viralScore": 80,
+  "copyCount": 7600,
+  "workedVotes": 198,
+  "totalVotes": 247,
+  "daysAgo": 9
+ },
+ {
+  "title": "ATS Resume Bullet Rewriter",
+  "masterPrompt": "Rewrite my work into ATS resume bullets for a [ROLE] role at a [COMPANY_TYPE]. My raw work: [MY_WORK]. Rules: start every bullet with a strong verb, add numbers/metrics where my work implies them (mark guesses with ?), keep each bullet under 18 words, mirror keywords a [ROLE] JD would use. Give 5 bullets + 1-line summary.",
+  "category": "Resume",
+  "section": "Resume",
+  "tool": "ChatGPT",
+  "useCases": [
+   "resume",
+   "ats resume",
+   "job application",
+   "internship resume",
+   "cv bullets"
+  ],
+  "variables": [
+   "ROLE",
+   "MY_WORK",
+   "COMPANY_TYPE"
+  ],
+  "viralScore": 92,
+  "copyCount": 18700,
+  "workedVotes": 423,
+  "totalVotes": 471,
+  "daysAgo": 2
+ },
+ {
+  "title": "LinkedIn About Section That Gets Calls",
+  "masterPrompt": "Write my LinkedIn About section. Field: [FIELD]. Best achievement: [ACHIEVEMENT]. Goal: [GOAL]. First line must be a hook a recruiter stops at. First person, human, zero buzzword soup ('passionate synergy' banned). 150-200 words, ends with what I'm open to + how to reach me. Give 2 tones: confident-student and professional.",
+  "category": "Resume",
+  "section": "Resume",
+  "tool": "Claude",
+  "useCases": [
+   "linkedin profile",
+   "about section",
+   "personal branding",
+   "job search"
+  ],
+  "variables": [
+   "FIELD",
+   "ACHIEVEMENT",
+   "GOAL"
+  ],
+  "viralScore": 84,
+  "copyCount": 10200,
+  "workedVotes": 256,
+  "totalVotes": 311,
+  "daysAgo": 7
+ },
+ {
+  "title": "Cold DM / Cover Note for Internships",
+  "masterPrompt": "Write a cold DM to a hiring manager at [COMPANY] for a [ROLE] internship. My one proof of work: [ONE_PROOF]. Under 90 words, opens with something specific about their product (leave [SPECIFIC_DETAIL] for me to fill), no begging tone, ends with one easy yes/no question. Also write a 3-line email version.",
+  "category": "Resume",
+  "section": "Resume",
+  "tool": "ChatGPT",
+  "useCases": [
+   "cold dm",
+   "internship application",
+   "cover letter",
+   "linkedin dm",
+   "job outreach"
+  ],
+  "variables": [
+   "COMPANY",
+   "ROLE",
+   "ONE_PROOF"
+  ],
+  "viralScore": 85,
+  "copyCount": 11100,
+  "workedVotes": 274,
+  "totalVotes": 329,
+  "daysAgo": 5
+ },
+ {
+  "title": "Diwali Family Portrait — Festival Edit",
+  "masterPrompt": "Edit [FAMILY_PHOTO] into a Diwali portrait: change outfits to [OUTFIT_STYLE] (kurta / saree, rich festive colours), background = decorated home entrance with diyas, rangoli and fairy lights. Keep every face exactly the same. Warm golden light, everyone smiling naturally, high resolution — ready to share as a Diwali greeting.",
+  "category": "Festival",
+  "section": "Festival",
+  "tool": "Nano Banana",
+  "useCases": [
+   "diwali photo",
+   "family portrait",
+   "festival edit",
+   "ethnic outfit photo",
+   "greeting photo"
+  ],
+  "variables": [
+   "FAMILY_PHOTO",
+   "OUTFIT_STYLE"
+  ],
+  "viralScore": 94,
+  "copyCount": 21500,
+  "workedVotes": 431,
+  "totalVotes": 478,
+  "daysAgo": 1
+ },
+ {
+  "title": "Eid / Festival Greeting Card Prompt",
+  "masterPrompt": "Create an elegant [FESTIVAL] greeting card: crescent / festive motifs, deep green & gold (or festival colours), Arabic-inspired border pattern, empty centre space. Add text exactly: '[MESSAGE]' and '— [NAME]' in clean calligraphy-style font. No people, no spelling errors in the text, print quality.",
+  "category": "Festival",
+  "section": "Festival",
+  "tool": "Gemini",
+  "useCases": [
+   "greeting card",
+   "eid card",
+   "festival wishes",
+   "whatsapp greeting"
+  ],
+  "variables": [
+   "FESTIVAL",
+   "NAME",
+   "MESSAGE"
+  ],
+  "viralScore": 79,
+  "copyCount": 6800,
+  "workedVotes": 176,
+  "totalVotes": 221,
+  "daysAgo": 10
+ },
+ {
+  "title": "Birthday Photo — Cake, Balloons & Confetti",
+  "masterPrompt": "Turn [PHOTO] into a birthday celebration portrait: person holding a cake with '[AGE]' candles, balloons and confetti in [THEME_COLOUR], party lights bokeh behind. Keep face identical, outfit upgraded to smart party wear, joyful natural expression. Vertical 4:5, ultra detailed, Instagram-ready.",
+  "category": "Festival",
+  "section": "Festival",
+  "tool": "Nano Banana",
+  "useCases": [
+   "birthday photo",
+   "birthday edit",
+   "celebration photo",
+   "party photo"
+  ],
+  "variables": [
+   "PHOTO",
+   "AGE",
+   "THEME_COLOUR"
+  ],
+  "viralScore": 91,
+  "copyCount": 17300,
+  "workedVotes": 398,
+  "totalVotes": 442,
+  "daysAgo": 3
+ }
+]

@@ -1,0 +1,39 @@
+{
+  "name": "promptvault",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "PromptVault — searchable vault of viral and product-management master prompts, ranked by a hybrid algorithm.",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c yellow,cyan \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "node --watch --disable-warning=ExperimentalWarning server/src/index.ts",
+    "dev:client": "vite",
+    "build": "vite build",
+    "start": "node --disable-warning=ExperimentalWarning server/src/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p server/tsconfig.json",
+    "test": "node --disable-warning=ExperimentalWarning --test \"server/test/**/*.test.ts\"",
+    "ext:vendor": "node scripts/vendor-extension.mjs"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "5.100.10",
+    "react": "19.2.5",
+    "react-dom": "19.2.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.1.13",
+    "@tesseract.js-data/eng": "1.0.0",
+    "@types/node": "24.10.1",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "5.1.1",
+    "concurrently": "^9.2.5",
+    "tailwindcss": "4.1.13",
+    "tailwindcss-safe-area": "1.3.0",
+    "tesseract.js": "7.0.0",
+    "typescript": "5.9.3",
+    "vite": "^7.3.8"
+  }
+}

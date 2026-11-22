@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PromptVault</title>
+  <link rel="stylesheet" href="sidepanel.css" />
+</head>
+<body>
+  <header>
+    <strong>PromptVault</strong>
+    <span class="sub">Post Analyzer</span>
+  </header>
+
+  <section id="consent" hidden>
+    <p><b>How this works</b></p>
+    <ul>
+      <li>Nothing is read until you click <b>Analyze this post</b>.</li>
+      <li>Then PromptVault reads that one post's text and images. For a reel, it plays the reel once and listens to it.</li>
+      <li>Images and audio are processed and then thrown away. Only the extracted text and the post link are stored, so the next person gets the result instantly.</li>
+    </ul>
+    <button id="consent-ok" class="primary">Got it</button>
+  </section>
+
+  <main id="app" hidden>
+    <p id="target" class="muted">Open an Instagram reel/post or a LinkedIn post.</p>
+    <label id="listen-row" class="check" hidden><input type="checkbox" id="listen" checked /> If it's a reel/video, listen to it (plays once, up to 90 s)</label>
+    <button id="analyze" class="primary" disabled>Analyze this post</button>
+    <div id="progress" hidden><div class="bar"><div id="bar-fill"></div></div><p id="progress-text" class="muted"></p></div>
+    <p id="error" class="error" hidden></p>
+    <div id="result"></div>
+  </main>
+
+  <footer class="muted">Mobile app: coming soon</footer>
+  <script type="module" src="sidepanel.js"></script>
+</body>
+</html>

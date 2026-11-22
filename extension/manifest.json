@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "PromptVault — Post Analyzer",
+  "version": "0.1.0",
+  "description": "Find the AI prompt in an Instagram reel/post or LinkedIn post. Runs only when you click Analyze.",
+  "minimum_chrome_version": "116",
+  "action": { "default_title": "Open PromptVault" },
+  "side_panel": { "default_path": "sidepanel.html" },
+  "background": { "service_worker": "background.js", "type": "module" },
+  "permissions": ["sidePanel", "activeTab", "scripting", "tabCapture", "storage"],
+  "host_permissions": [
+    "https://www.instagram.com/*",
+    "https://*.cdninstagram.com/*",
+    "https://*.fbcdn.net/*",
+    "https://www.linkedin.com/*",
+    "https://*.linkedin.com/*",
+    "https://media.licdn.com/*",
+    "http://localhost:3000/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  }
+}
