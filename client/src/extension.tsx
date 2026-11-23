@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 // The extension isn't on the Chrome Web Store yet, so it's installed from a zip
 // the build puts next to the site (scripts/build-extension.mjs) via "Load unpacked".
@@ -50,7 +51,9 @@ function InstallDialog({ onClose }: { onClose: () => void }) {
     try { await navigator.clipboard.writeText(browser.page); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch { /* user can type it */ }
   };
 
-  return (
+  // Portal to <body>: the sticky header's backdrop-filter would otherwise become the
+  // containing block for this fixed overlay and clip it to the header's height.
+  return createPortal(
     <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div role="dialog" aria-modal="true" aria-labelledby="ext-title" className="modal modal-wide">
         <div className="flex items-start justify-between gap-4">
@@ -93,6 +96,7 @@ function InstallDialog({ onClose }: { onClose: () => void }) {
           One-click install from the Chrome Web Store is coming soon. To update until then, download again, replace the folder's contents, and press the reload icon on the extension's card.
         </p>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
