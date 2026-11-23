@@ -153,3 +153,109 @@ export async function prepareVideo() {
     viewport: { width: innerWidth, height: innerHeight },
   };
 }
+
+/**
+ * Fallback recorder that runs inside the page: records the reel's own <video>
+ * via captureStream(), so it needs no tabCapture / activeTab grant. Self-contained
+ * (injected with chrome.scripting). Returns base64 audio + JPEG data-URL frames.
+ * @param {number} seconds
+ */
+export async function recordVideoInPage(seconds) {
+  const FRAME_EVERY_MS = 1000, MAX_FRAMES = 30, FRAME_CHANGE = 10, SILENCE = 0.01;
+  const v = document.querySelector("video[data-pv-target]");
+  if (!v) return { error: "Video not found — scroll the reel into view and retry." };
+  if (typeof v.captureStream !== "function") return { error: "This browser can't record the video element." };
+
+  let stream;
+  try {
+    stream = v.captureStream();
+  } catch (e) {
+    return { error: e.message || String(e) };
+  }
+
+  const sigOf = (src) => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 16;
+    const g = c.getContext("2d", { willReadFrequently: true });
+    g.drawImage(src, 0, 0, 16, 16);
+    const d = g.getImageData(0, 0, 16, 16).data;
+    const out = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) out[i] = (d[i * 4] * 0.3 + d[i * 4 + 1] * 0.59 + d[i * 4 + 2] * 0.11) | 0;
+    return out;
+  };
+  const changed = (a, b) => {
+    if (!a) return true;
+    let sum = 0;
+    for (let i = 0; i < a.length; i++) sum += Math.abs(a[i] - b[i]);
+    return sum / a.length > FRAME_CHANGE;
+  };
+
+  // Audio: record + measure peak (to skip uploading silent reels).
+  const audioTracks = stream.getAudioTracks();
+  let recorder = null, ctx = null, analyser = null, peak = 0;
+  const chunks = [];
+  const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm";
+  if (audioTracks.length) {
+    const audioStream = new MediaStream(audioTracks);
+    recorder = new MediaRecorder(audioStream, { mimeType, audioBitsPerSecond: 32000 });
+    recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    ctx = new AudioContext();
+    analyser = ctx.createAnalyser();
+    ctx.createMediaStreamSource(audioStream).connect(analyser); // not to destination: the page already plays it
+  }
+  const stopped = recorder ? new Promise((r) => { recorder.onstop = r; }) : Promise.resolve();
+  const samples = new Float32Array(analyser ? analyser.fftSize : 0);
+
+  const frames = [];
+  let lastSig = null, framesBlocked = false;
+  const total = Math.max(3, seconds);
+  const started = performance.now();
+  recorder?.start(1000);
+
+  try {
+    await new Promise((resolve) => {
+      const meter = analyser && setInterval(() => {
+        analyser.getFloatTimeDomainData(samples);
+        for (const s of samples) peak = Math.max(peak, Math.abs(s));
+      }, 200);
+      const tick = setInterval(() => {
+        const elapsed = (performance.now() - started) / 1000;
+        if (!framesBlocked && frames.length < MAX_FRAMES && v.videoWidth > 50) {
+          try {
+            const sig = sigOf(v);
+            if (changed(lastSig, sig)) {
+              lastSig = sig;
+              const c = document.createElement("canvas");
+              c.width = v.videoWidth;
+              c.height = v.videoHeight;
+              c.getContext("2d").drawImage(v, 0, 0);
+              frames.push(c.toDataURL("image/jpeg", 0.92));
+            }
+          } catch {
+            framesBlocked = true; // cross-origin video: canvas is tainted, keep audio only
+          }
+        }
+        if (elapsed >= total || v.ended) {
+          clearInterval(tick);
+          if (meter) clearInterval(meter);
+          resolve();
+        }
+      }, FRAME_EVERY_MS);
+    });
+  } finally {
+    if (recorder && recorder.state !== "inactive") recorder.stop();
+    await stopped;
+    stream.getTracks().forEach((t) => t.stop());
+    await ctx?.close();
+  }
+
+  let audio = null;
+  if (recorder && peak > SILENCE && chunks.length) {
+    const blob = new Blob(chunks, { type: mimeType });
+    const buf = new Uint8Array(await blob.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+    audio = { mime: mimeType, data: btoa(bin) };
+  }
+  return { audio, frames };
+}

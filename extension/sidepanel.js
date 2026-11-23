@@ -1,6 +1,6 @@
 import Tesseract from "./vendor/tesseract/tesseract.esm.min.js";
 import { API_BASE, MAX_RECORD_SECONDS } from "./config.js";
-import { readPost, prepareVideo } from "./page.js";
+import { readPost, prepareVideo, recordVideoInPage } from "./page.js";
 import { recordTab } from "./capture.js";
 
 const $ = (id) => document.getElementById(id);
@@ -138,9 +138,27 @@ async function activeTab() {
   return tab;
 }
 
-async function inTab(tabId, func) {
-  const [res] = await chrome.scripting.executeScript({ target: { tabId }, func });
+async function inTab(tabId, func, args = []) {
+  const [res] = await chrome.scripting.executeScript({ target: { tabId }, func, args });
   return res?.result;
+}
+
+async function recordInPage(tabId, seconds, onTick) {
+  const total = Math.max(3, seconds);
+  const started = performance.now();
+  const timer = setInterval(() => onTick(Math.min((performance.now() - started) / 1000, total), total), 500);
+  let res;
+  try {
+    res = await inTab(tabId, recordVideoInPage, [seconds]);
+  } finally {
+    clearInterval(timer);
+  }
+  if (!res || res.error) {
+    throw new Error(`Couldn't record this reel (${res?.error || "no response from the page"}). Click the PromptVault toolbar icon on this tab, then retry.`);
+  }
+  const audio = res.audio ? await (await fetch(`data:${res.audio.mime};base64,${res.audio.data}`)).blob() : null;
+  const frames = await Promise.all(res.frames.map(async (u) => (await fetch(u)).blob()));
+  return { audio, frames };
 }
 
 async function refreshTarget() {
@@ -192,13 +210,17 @@ async function analyze() {
       const prep = await inTab(tab.id, prepareVideo);
       if (!prep?.ok) throw new Error(prep?.reason || "Couldn't play the reel.");
       const seconds = Math.min(MAX_RECORD_SECONDS, Math.ceil(prep.duration || 30));
+      const onTick = (t, total) =>
+        progress(15 + (t / total) * 45, `Listening… ${Math.floor(t)}s / ${Math.ceil(total)}s — keep this panel open`);
       let rec;
       try {
-        rec = await recordTab(tab.id, { seconds, rect: prep.rect, viewport: prep.viewport }, (t, total) =>
-          progress(15 + (t / total) * 45, `Listening… ${Math.floor(t)}s / ${Math.ceil(total)}s — keep this panel open`),
-        );
+        rec = await recordTab(tab.id, { seconds, rect: prep.rect, viewport: prep.viewport }, onTick);
       } catch (e) {
-        throw new Error(`Couldn't record this tab (${e.message}). Click the PromptVault toolbar icon on this tab once, then retry.`);
+        // tabCapture needs the toolbar icon to have been clicked on this exact tab
+        // (activeTab), which is lost on tab switch/navigation. Fall back to recording
+        // the <video> element itself inside the page — no grant needed.
+        console.warn("tabCapture failed, recording the video element instead", e);
+        rec = await recordInPage(tab.id, seconds, onTick);
       }
       audio = rec.audio;
       if (!audio) notes.push("The reel was silent, so only the on-screen text and caption were checked.");
